@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+uploads
+package-lock.json
+docs/MODELO_DE_DATOS.md

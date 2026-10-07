@@ -1,0 +1,3 @@
+# Normaliza los fines de línea: el repositorio y las copias de trabajo usan LF en cualquier sistema,
+# para que Prettier y ESLint den el mismo resultado en Windows, macOS y Linux.
+* text=auto eol=lf

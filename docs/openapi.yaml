@@ -1,0 +1,2146 @@
+openapi: 3.0.3
+info:
+  title: API del Estímulo Social de Transporte · Barranquilla
+  version: 0.5.0
+  description: |
+    API RESTful versionada (`/api/v1`) de la plataforma del Estímulo Social de Transporte de la Alcaldía de
+    Barranquilla (Acuerdo Distrital 0022 de 2025).
+
+    **Autenticación del portal interno** (`/auth`, `/admin`): `POST /auth/login` entrega un **token de acceso JWT de
+    10 minutos** (`bearerInterno`, que el navegador guarda solo en memoria) y deja el **refresh token** en la cookie
+    `estimulo_rt` (HttpOnly, SameSite=Strict, `Path=/api/v1/auth`). `POST /auth/refresh` y `/auth/logout` exigen además
+    la cabecera `X-Requested-With: estimulo-portal` (defensa contra CSRF). La sesión se cierra por inactividad y por
+    un tope absoluto, ambos parametrizables.
+
+    Los permisos se leen de la base de datos en **cada** petición: un cambio de rol, de vigencia o un bloqueo rige de
+    inmediato, también para llamadas directas a la API.
+
+    **Errores**: todos tienen la forma `{ "error": { "codigo", "mensaje", "errores?", "detalle?" } }`. Las
+    validaciones responden 422 con la lista de campos a corregir.
+
+    **Fechas**: instantes en UTC (ISO 8601); los «días de calendario» y las vigencias se calculan en `America/Bogota`.
+servers:
+  - url: /api/v1
+    description: Versión 1 de la API
+tags:
+  - name: Salud
+  - name: Portal ciudadano
+  - name: Correo
+  - name: Autenticación
+  - name: Administración de usuarios
+  - name: Catálogos
+  - name: Documentos exigidos
+  - name: Parámetros
+  - name: Vigencias y cupos
+  - name: Texto de autorización
+  - name: Plantillas de correo
+
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Estado del servicio y de la base de datos
+      responses:
+        '200':
+          description: Servicio y base de datos disponibles
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Salud' }
+        '503':
+          description: Sin conexión a la base de datos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Salud' }
+
+  /publico/preinscripcion/formulario:
+    get:
+      tags: [Portal ciudadano]
+      summary: Datos del formulario de preinscripción
+      description: 'Catálogos activos (tipos de identificación, localidades, barrios), texto de autorización vigente y el token del formulario (control contra envíos automatizados).'
+      responses:
+        '200':
+          description: Datos del formulario
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormularioPreinscripcion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/preinscripciones:
+    post:
+      tags: [Portal ciudadano]
+      summary: Enviar la preinscripción (RF-PRE-02, RF-PRE-03)
+      description: 'Registra la persona con discapacidad y su cuidador, la aceptación de la autorización (fecha, hora, IP y versión) y envía el correo de verificación. Una persona solo puede preinscribirse una vez por vigencia.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreinscripcionEntrada' }
+      responses:
+        '201':
+          description: Preinscripción registrada; se envió el correo de verificación
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreinscripcionCreada' }
+        '400':
+          description: El formulario venció, se envió demasiado rápido o fue rechazado (`FORMULARIO_INVALIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Ya existe una solicitud (`SOLICITUD_EXISTENTE`), la autorización cambió (`AUTORIZACION_CAMBIO`) o no hay preinscripción abierta (`PREINSCRIPCION_CERRADA`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/preinscripciones/verificar-correo:
+    post:
+      tags: [Portal ciudadano]
+      summary: Verificar el correo con el enlace recibido (RF-PRE-04)
+      description: 'Al verificar se envía la notificación de preinscripción exitosa con el siguiente paso y el enlace de consulta.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado: { type: string, enum: [VERIFICADO, YA_VERIFICADO] }
+        '400':
+          description: Enlace inválido (`ENLACE_INVALIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '410':
+          description: El enlace venció (`ENLACE_VENCIDO`); se puede solicitar uno nuevo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/preinscripciones/reenviar-verificacion:
+    post:
+      tags: [Portal ciudadano]
+      summary: Reenviar el enlace de verificación del correo (RF-PRE-04)
+      description: 'Responde siempre igual para no revelar qué identificaciones tienen solicitud. Limita la frecuencia de los reenvíos.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipoIdentificacionId, numero]
+              properties:
+                tipoIdentificacionId: { type: integer }
+                numero: { type: string }
+      responses:
+        '202':
+          description: Solicitud recibida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /webhooks/correo:
+    post:
+      tags: [Correo]
+      summary: Reporte de entrega o rebote de un correo (RNF-13)
+      description: 'Lo llama el proveedor de correo. Se protege con el secreto compartido en la cabecera `x-webhook-secret`.'
+      parameters:
+        - { name: x-webhook-secret, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId, evento]
+              properties:
+                messageId: { type: string }
+                evento: { type: string, enum: [ENTREGADO, REBOTADO] }
+                detalle: { type: string }
+      responses:
+        '200': { description: Estado del correo actualizado }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /publico/consulta/solicitar-codigo:
+    post:
+      tags: [Portal ciudadano]
+      summary: Pedir un código de un solo uso para consultar el estado (RF-PRE-05, RNF-05)
+      description: 'Envía un código de 6 dígitos al correo verificado de la solicitud. Se indica la solicitud con el tipo y número de identificación de la persona con discapacidad o con el número de radicado. Responde siempre igual: no revela si la solicitud existe ni cuál es el correo. Limita la frecuencia (1 por minuto, 5 por hora).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdentificacionConsulta' }
+      responses:
+        '202':
+          description: Solicitud recibida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/consulta/verificar-codigo:
+    post:
+      tags: [Portal ciudadano]
+      summary: Validar el código y abrir la sesión de consulta
+      description: 'El código vale lo que indique el parámetro `otp_vigencia_minutos`, sirve una sola vez y se anula tras 5 intentos fallidos. Cualquier fallo responde igual (`CODIGO_INVALIDO`).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/IdentificacionConsulta' }
+                - type: object
+                  required: [codigo]
+                  properties:
+                    codigo: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Sesión de consulta abierta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionConsulta' }
+        '401':
+          description: Código inválido o vencido (`CODIGO_INVALIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/consulta/enlace:
+    post:
+      tags: [Portal ciudadano]
+      summary: Abrir la sesión de consulta con el enlace seguro de las notificaciones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200':
+          description: Sesión de consulta abierta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionConsulta' }
+        '401':
+          description: Enlace inválido (`ENLACE_INVALIDO`) o vencido (`ENLACE_VENCIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/consulta/solicitud:
+    get:
+      tags: [Portal ciudadano]
+      summary: Estado de la solicitud (RF-PRE-05)
+      description: 'Solo con la sesión que entregan el código o el enlace seguro. Muestra la etapa, el estado, una explicación en lenguaje claro, el siguiente paso y las comunicaciones enviadas.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Estado de la solicitud
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstadoSolicitud' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /publico/caracterizacion:
+    get:
+      tags: [Portal ciudadano]
+      summary: Formulario de caracterización (RF-CAR-01, RF-CAR-02)
+      description: 'Solo con la sesión que entregan el código o el enlace seguro. Devuelve los datos precargados de la preinscripción, lo que ya se guardó, los catálogos administrables y el avance por secciones. La sección del cuidador solo aparece si la persona indica que requiere el servicio.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Formulario con su avance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Caracterizacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    patch:
+      tags: [Portal ciudadano]
+      summary: Guardar el avance de la caracterización (RF-CAR-04, RNF-11)
+      description: 'Guarda solo los campos enviados y acepta datos incompletos para poder retomar después. Rechaza los datos mal escritos o incoherentes con un mensaje por campo. Exige la versión que la persona vio: si otra ventana guardó antes responde 409. Guardar lo mismo no crea una versión nueva. Los datos de salud, etnia y subsidios se guardan cifrados.'
+      security: [{ bearerCiudadano: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CaracterizacionCambios' }
+      responses:
+        '200':
+          description: Avance guardado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CaracterizacionGuardada' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: La información cambió en otra ventana (CONFLICTO_VERSION) o la solicitud ya no admite cambios (SOLICITUD_NO_EDITABLE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/caracterizacion/documentos:
+    get:
+      tags: [Portal ciudadano]
+      summary: Documentos que debe cargar la solicitud (RF-CAR-03)
+      description: 'Lista los documentos exigidos según la parametrización vigente: los de la persona con discapacidad, los comunes y, solo si requiere servicio para el cuidador, los del cuidador. Cada uno con su estado (PENDIENTE, CARGADO o RECHAZADO), el archivo vigente y si hay un modelo para descargar.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Documentos y reglas de carga
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentosSolicitud' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /publico/caracterizacion/documentos/{documentoId}:
+    post:
+      tags: [Portal ciudadano]
+      summary: Cargar o reemplazar un documento (RF-CAR-03, RNF-06)
+      description: 'Valida el formato por el contenido real del archivo (no por su extensión), el tamaño máximo y los formatos del parámetro vigente. Se guarda cifrado, con fecha y hash SHA-256. Al reemplazar, el archivo anterior queda como «reemplazado»; nunca se borra.'
+      security: [{ bearerCiudadano: [] }]
+      parameters:
+        - { name: documentoId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '201':
+          description: Documento cargado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoSolicitud' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: La solicitud ya no admite cambios (SOLICITUD_NO_EDITABLE) o el documento no aplica (DOCUMENTO_NO_APLICA)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/caracterizacion/documentos/{documentoId}/archivo:
+    get:
+      tags: [Portal ciudadano]
+      summary: Descargar el archivo que cargó la persona
+      description: 'Descifra el archivo y verifica su hash de integridad antes de entregarlo.'
+      security: [{ bearerCiudadano: [] }]
+      parameters:
+        - { name: documentoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Archivo
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /publico/caracterizacion/revision:
+    get:
+      tags: [Portal ciudadano]
+      summary: Qué falta para poder enviar la solicitud (RF-CAR-04)
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Datos obligatorios y documentos pendientes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevisionSolicitud' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /publico/caracterizacion/radicar:
+    post:
+      tags: [Portal ciudadano]
+      summary: Enviar la solicitud y generar el radicado (RF-CAR-04)
+      description: 'Valida que estén completos los datos obligatorios y los documentos exigidos; genera un número de radicado único con fecha y hora (EST-AAAA-NNNNNN), cambia el estado a «Radicada» y envía la notificación con el siguiente paso, el enlace de consulta y la aclaración de que no equivale a la aprobación del beneficio. Después de radicar, la solicitud ya no se modifica.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '201':
+          description: Solicitud radicada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Radicacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '409':
+          description: Ya está radicada (YA_RADICADA) o todavía no se puede enviar (SOLICITUD_NO_EDITABLE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
+  /publico/documentos/{documentoId}/modelo:
+    get:
+      tags: [Portal ciudadano]
+      summary: Descargar el modelo de un documento (RF-CAR-03)
+      description: 'Carta de solicitud o formato de carta de cuidador, si la Gerencia lo publicó. No requiere sesión.'
+      parameters:
+        - { name: documentoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Archivo del modelo
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión (usuario y contraseña)
+      description: Bloquea temporalmente la cuenta tras los intentos fallidos parametrizados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Login' }
+      responses:
+        '200':
+          description: Sesión iniciada. Fija la cookie `estimulo_rt`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionIniciada' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403':
+          description: El acceso no está vigente (`ACCESO_NO_VIGENTE`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429':
+          description: Cuenta bloqueada temporalmente (`CUENTA_BLOQUEADA`) o demasiados intentos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/refresh:
+    post:
+      tags: [Autenticación]
+      summary: Renovar el token de acceso con la cookie de sesión
+      description: Rota el refresh token. También restaura la sesión al recargar la página.
+      parameters:
+        - $ref: '#/components/parameters/CabeceraPortal'
+      responses:
+        '200':
+          description: Sesión renovada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionIniciada' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403':
+          description: Falta la cabecera del portal (`ORIGEN_NO_PERMITIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cerrar la sesión
+      parameters:
+        - $ref: '#/components/parameters/CabeceraPortal'
+      responses:
+        '204': { description: Sesión cerrada }
+        '403':
+          description: Falta la cabecera del portal (`ORIGEN_NO_PERMITIDO`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/me:
+    get:
+      tags: [Autenticación]
+      summary: Perfil y permisos del usuario autenticado
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Perfil' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /auth/cambiar-password:
+    post:
+      tags: [Autenticación]
+      summary: Cambiar la contraseña propia
+      description: Cierra las demás sesiones y entrega una sesión nueva.
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passwordActual, passwordNueva]
+              properties:
+                passwordActual: { type: string }
+                passwordNueva:
+                  {
+                    type: string,
+                    description: 'Mínimo 10 caracteres con mayúscula, minúscula, número y símbolo',
+                  }
+      responses:
+        '200':
+          description: Contraseña cambiada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionIniciada' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/roles:
+    get:
+      tags: [Administración de usuarios]
+      summary: Roles, sus permisos y cuántos usuarios los tienen
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Roles (los del sistema primero)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Rol' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Administración de usuarios]
+      summary: Crear un rol propio
+      description: 'El código se genera del nombre. El nombre no puede repetirse (sin distinguir mayúsculas). Los permisos se eligen del catálogo; un rol puede crearse sin permisos y completarse después.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RolEntrada' }
+      responses:
+        '201':
+          description: Rol creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rol' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/roles/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Administración de usuarios]
+      summary: Modificar un rol
+      description: 'Un rol propio cambia de nombre, descripción y permisos. Un rol del sistema conserva su nombre y puede cambiar su descripción y sus permisos. El rol de administrador no se modifica (siempre tiene todos los permisos). El cambio de permisos rige de inmediato para quienes tienen el rol.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RolEntrada' }
+      responses:
+        '200':
+          description: Rol modificado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rol' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+    delete:
+      tags: [Administración de usuarios]
+      summary: Eliminar un rol propio
+      description: 'Solo roles propios y sin usuarios asignados (ROL_EN_USO si los tiene; ROL_DEL_SISTEMA para los del documento).'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '204': { description: Rol eliminado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+
+  /admin/permisos:
+    get:
+      tags: [Administración de usuarios]
+      summary: Catálogo de permisos que se pueden dar a un rol
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Permisos agrupados por módulo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Permiso' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+
+  /admin/usuarios:
+    get:
+      tags: [Administración de usuarios]
+      summary: Listar usuarios internos
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - {
+            name: q,
+            in: query,
+            schema: { type: string },
+            description: Busca en usuario,
+            nombres y correo,
+          }
+        - { name: estado, in: query, schema: { type: string, enum: [ACTIVO, BLOQUEADO, BAJA] } }
+        - { name: rolId, in: query, schema: { type: integer } }
+        - { name: pagina, in: query, schema: { type: integer, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de usuarios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Usuario' }
+                  total: { type: integer }
+                  pagina: { type: integer }
+                  tamano: { type: integer }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Administración de usuarios]
+      summary: Crear un usuario interno
+      description: La contraseña inicial es temporal; la persona debe cambiarla al ingresar.
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioNuevo' }
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/usuarios/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Administración de usuarios]
+      summary: Consultar un usuario
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Usuario
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Administración de usuarios]
+      summary: Modificar datos, roles y vigencias de un usuario
+      description: El administrador principal debe conservar el rol de administrador sin vencimiento.
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioEdicion' }
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/usuarios/{id}/bloquear:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Administración de usuarios]
+      summary: Bloquear un usuario (exige motivo)
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Motivo' }
+      responses:
+        '200':
+          description: Usuario bloqueado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/usuarios/{id}/desbloquear:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Administración de usuarios]
+      summary: Levantar el bloqueo de un usuario
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Usuario activo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+
+  /admin/usuarios/{id}/baja:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Administración de usuarios]
+      summary: Dar de baja un usuario (definitivo, exige motivo)
+      description: 'El usuario no se borra; se conserva para la trazabilidad.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Motivo' }
+      responses:
+        '200':
+          description: Usuario dado de baja
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/usuarios/{id}/restablecer-password:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Administración de usuarios]
+      summary: Fijar una contraseña temporal
+      description: Cierra las sesiones del usuario y lo obliga a cambiarla al ingresar.
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '204': { description: Contraseña temporal fijada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/catalogos:
+    get:
+      tags: [Catálogos]
+      summary: 'Resumen de las listas del programa'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/ResumenCatalogo' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/catalogos/{catalogo}/items:
+    parameters:
+      - {
+          name: catalogo,
+          in: path,
+          required: true,
+          schema:
+            {
+              type: string,
+              enum:
+                [
+                  TIPO_IDENTIFICACION,
+                  LOCALIDAD,
+                  BARRIO,
+                  EPS,
+                  TIPO_TRANSPORTE,
+                  GENERO,
+                  ESTADO_CIVIL,
+                  ETNIA,
+                  ESCOLARIDAD,
+                  OCUPACION,
+                  CAUSAL_BLOQUEO,
+                  CAUSAL_REVOCATORIA,
+                ],
+            },
+        }
+    get:
+      tags: [Catálogos]
+      summary: 'Listar los elementos de una lista'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: activo, in: query, schema: { type: boolean } }
+        - {
+            name: padreId,
+            in: query,
+            schema: { type: integer },
+            description: Solo barrios de esa localidad,
+          }
+        - { name: pagina, in: query, schema: { type: integer, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items: { type: array, items: { $ref: '#/components/schemas/ItemCatalogo' } },
+                      total: { type: integer },
+                      pagina: { type: integer },
+                      tamano: { type: integer },
+                    },
+                }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Catálogos]
+      summary: 'Crear un elemento de una lista'
+      description: 'El código se genera del nombre; los tipos de identificación exigen su sigla. Un barrio exige su localidad.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemEntrada' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemCatalogo' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/catalogos/items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Catálogos]
+      summary: 'Modificar un elemento (genera una versión nueva)'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemEntrada' }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemCatalogo' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/catalogos/items/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Catálogos]
+      summary: 'Activar un elemento'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemCatalogo' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/catalogos/items/{id}/desactivar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Catálogos]
+      summary: 'Desactivar un elemento (nunca se borra)'
+      description: 'Una localidad con barrios activos no se puede desactivar.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemCatalogo' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/catalogos/items/{id}/versiones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Catálogos]
+      summary: 'Historial de versiones de un elemento'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/VersionRegistro' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/documentos-requeridos:
+    get:
+      tags: [Documentos exigidos]
+      summary: 'Listar los documentos exigidos (RN-06)'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/DocumentoRequerido' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Documentos exigidos]
+      summary: 'Crear un documento exigido'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentoEntrada' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/documentos-requeridos/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Documentos exigidos]
+      summary: 'Modificar un documento exigido (genera una versión nueva)'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentoEntrada' }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/documentos-requeridos/{id}/modelo:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Documentos exigidos]
+      summary: Publicar o reemplazar el modelo descargable de un documento (RF-CAR-03)
+      description: 'Por ejemplo, la carta de solicitud o el formato de carta de cuidador que entrega la Gerencia. Acepta PDF, DOCX u ODT de hasta 10 MB, validados por su contenido real. Queda en la bitácora con su hash.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '200':
+          description: Modelo publicado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentoId: { type: integer }
+                  nombre: { type: string }
+                  formato: { type: string }
+                  tamanoBytes: { type: integer }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/documentos-requeridos/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Documentos exigidos]
+      summary: 'Activar un documento exigido'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/documentos-requeridos/{id}/desactivar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Documentos exigidos]
+      summary: 'Desactivar un documento exigido'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/documentos-requeridos/{id}/versiones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Documentos exigidos]
+      summary: 'Historial de versiones de un documento exigido'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/VersionRegistro' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/parametros:
+    get:
+      tags: [Parámetros]
+      summary: 'Listar los parámetros con su valor vigente'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    { items: { type: array, items: { $ref: '#/components/schemas/Parametro' } } },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/parametros/{clave}/historial:
+    parameters:
+      - { name: clave, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Parámetros]
+      summary: 'Historial de versiones de un parámetro'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/VersionParametro' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/parametros/{clave}/versiones:
+    parameters:
+      - { name: clave, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Parámetros]
+      summary: 'Crear una versión nueva de un parámetro'
+      description: 'Rige desde ya o desde una fecha futura; exige motivo y queda con su aprobador.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionParametroEntrada' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Parametro' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/vigencias:
+    get:
+      tags: [Vigencias y cupos]
+      summary: 'Listar las vigencias y sus cupos'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    { items: { type: array, items: { $ref: '#/components/schemas/Vigencia' } } },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Vigencias y cupos]
+      summary: 'Crear una vigencia'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VigenciaNueva' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vigencia' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/vigencias/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Vigencias y cupos]
+      summary: 'Modificar fechas y cupos totales de una vigencia'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VigenciaEdicion' }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vigencia' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/vigencias/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vigencias y cupos]
+      summary: 'Activar una vigencia'
+      description: 'Solo una vigencia está activa a la vez: la que recibe las preinscripciones.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vigencia' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/vigencias/{id}/versiones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vigencias y cupos]
+      summary: 'Historial de versiones de una vigencia'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/VersionRegistro' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/autorizacion:
+    get:
+      tags: [Texto de autorización]
+      summary: 'Texto vigente y versiones anteriores (RF-PRE-03)'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AutorizacionEstado' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Texto de autorización]
+      summary: 'Publicar una versión nueva del texto'
+      description: 'Las aceptaciones anteriores conservan la versión que aceptaron.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutorizacionEntrada' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { type: object, properties: { version: { type: integer } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/plantillas:
+    get:
+      tags: [Plantillas de correo]
+      summary: 'Listar las plantillas de correo'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items:
+                        { type: array, items: { $ref: '#/components/schemas/PlantillaResumen' } },
+                    },
+                }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/plantillas/{codigo}:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Plantillas de correo]
+      summary: 'Plantilla con su versión vigente, variables y versiones'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plantilla' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/plantillas/{codigo}/vista-previa:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Plantillas de correo]
+      summary: 'Vista previa con datos de ejemplo'
+      description: 'Señala variables desconocidas o faltantes sin impedir ver el resultado.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlantillaEntrada' }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VistaPrevia' }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/plantillas/{codigo}/versiones:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Plantillas de correo]
+      summary: 'Guardar una versión nueva de la plantilla'
+      description: 'Solo variables permitidas y con todas las obligatorias.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlantillaVersionEntrada' }
+      responses:
+        '201':
+          description: Correcto
+          content:
+            application/json:
+              schema: { type: object, properties: { version: { type: integer } } }
+        '400': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+components:
+  securitySchemes:
+    bearerCiudadano:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Sesión de consulta del ciudadano (30 minutos), obtenida con el código o el enlace seguro.
+    bearerInterno:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de acceso de 10 minutos obtenido en `/auth/login`.
+  parameters:
+    CabeceraPortal:
+      name: X-Requested-With
+      in: header
+      required: true
+      schema: { type: string, enum: [estimulo-portal] }
+      description: Cabecera que solo agrega el portal (defensa CSRF).
+  schemas:
+    Salud:
+      type: object
+      required: [estado, baseDeDatos]
+      properties:
+        estado: { type: string, enum: [ok, degradado] }
+        baseDeDatos: { type: string, enum: [ok, sin_conexion] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [codigo, mensaje]
+          properties:
+            codigo: { type: string }
+            mensaje: { type: string }
+            errores:
+              type: array
+              items:
+                type: object
+                properties:
+                  campo: { type: string }
+                  mensaje: { type: string }
+            detalle: {}
+    Login:
+      type: object
+      required: [usuario, password]
+      properties:
+        usuario: { type: string }
+        password: { type: string }
+    Perfil:
+      type: object
+      properties:
+        id: { type: integer }
+        usuario: { type: string }
+        nombres: { type: string }
+        correo: { type: string }
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              codigo: { type: string }
+              nombre: { type: string }
+        permisos:
+          type: array
+          items: { type: string }
+        debeCambiarPassword: { type: boolean }
+    SesionIniciada:
+      type: object
+      properties:
+        token: { type: string }
+        perfil: { $ref: '#/components/schemas/Perfil' }
+        inactividadMinutos: { type: integer }
+    Rol:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string }
+        sistema:
+          {
+            type: boolean,
+            description: 'Rol del documento (numeral 3.2): no se elimina ni se renombra',
+          }
+        usuarios: { type: integer, description: Usuarios que tienen este rol }
+        permisos:
+          type: array
+          items: { type: string }
+    RolEntrada:
+      type: object
+      required: [nombre, descripcion, permisos]
+      properties:
+        nombre: { type: string, minLength: 3, maxLength: 60 }
+        descripcion: { type: string, minLength: 3, maxLength: 250 }
+        permisos:
+          type: array
+          items: { type: string, example: catalogos.administrar }
+    Permiso:
+      type: object
+      properties:
+        codigo: { type: string, example: usuarios.administrar }
+        modulo: { type: string }
+        descripcion: { type: string }
+    RolAsignado:
+      type: object
+      description: El rol del usuario (cada usuario tiene uno solo)
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        usuario: { type: string }
+        nombres: { type: string }
+        correo: { type: string }
+        estado: { type: string, enum: [ACTIVO, BLOQUEADO, BAJA] }
+        bloqueoTemporalHasta: { type: string, format: date-time, nullable: true }
+        debeCambiarPassword: { type: boolean }
+        protegido: { type: boolean }
+        ultimoLoginAt: { type: string, format: date-time, nullable: true }
+        creadoAt: { type: string, format: date-time }
+        rol:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/RolAsignado'
+    UsuarioNuevo:
+      type: object
+      required: [usuario, nombres, correo, password, rolId]
+      properties:
+        usuario:
+          { type: string, description: '3 a 40 caracteres: minúsculas, números, punto, guion' }
+        nombres: { type: string }
+        correo: { type: string, format: email }
+        password: { type: string, description: Contraseña temporal que cumple la política }
+        rolId: { type: integer, description: El rol del usuario (uno solo) }
+    UsuarioEdicion:
+      type: object
+      required: [nombres, correo, rolId]
+      properties:
+        nombres: { type: string }
+        correo: { type: string, format: email }
+        rolId: { type: integer, description: El rol del usuario (uno solo; reemplaza al anterior) }
+    ResumenCatalogo:
+      type: object
+      properties:
+        catalogo: { type: string }
+        total: { type: integer }
+        activos: { type: integer }
+    ItemCatalogo:
+      type: object
+      properties:
+        id: { type: integer }
+        catalogo: { type: string }
+        codigo: { type: string }
+        nombre: { type: string }
+        padreId: { type: integer, nullable: true, description: Localidad del barrio }
+        padreNombre: { type: string, nullable: true }
+        orden: { type: integer }
+        activo: { type: boolean }
+        version: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    ItemEntrada:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string }
+        codigo: { type: string, description: Opcional; obligatorio en tipos de identificación }
+        padreId: { type: integer, nullable: true, description: Obligatorio en barrios }
+        orden: { type: integer, default: 0 }
+    VersionRegistro:
+      type: object
+      properties:
+        version: { type: integer }
+        snapshot: { type: object, description: Copia completa del registro en esa versión }
+        usuario: { type: string, nullable: true }
+        creadoAt: { type: string, format: date-time }
+    DocumentoRequerido:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string }
+        aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
+        obligatorio: { type: boolean }
+        orden: { type: integer }
+        activo: { type: boolean }
+        version: { type: integer }
+        modelo:
+          type: object
+          nullable: true
+          description: Modelo descargable que publicó la Gerencia (por ejemplo, la carta de solicitud)
+          properties:
+            nombre: { type: string }
+            formato: { type: string, enum: [pdf, docx, odt] }
+            tamanoBytes: { type: integer }
+            cargadoAt: { type: string, format: date-time }
+    DocumentoEntrada:
+      type: object
+      required: [nombre, aplicaA, obligatorio]
+      properties:
+        nombre: { type: string }
+        descripcion: { type: string }
+        aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
+        obligatorio: { type: boolean }
+        orden: { type: integer }
+    VersionParametro:
+      type: object
+      properties:
+        id: { type: integer }
+        valor: { type: string }
+        vigenteDesde: { type: string, format: date-time }
+        aprobadoPor: { type: string, nullable: true }
+        justificacion: { type: string, nullable: true }
+        creadoAt: { type: string, format: date-time }
+    Parametro:
+      type: object
+      properties:
+        clave: { type: string }
+        grupo: { type: string }
+        descripcion: { type: string }
+        tipo: { type: string, enum: [ENTERO, TEXTO, BOOLEANO] }
+        minimo: { type: integer, nullable: true }
+        maximo: { type: integer, nullable: true }
+        patron: { type: string, nullable: true }
+        pendienteDefinicion:
+          { type: boolean, description: Valor inicial a confirmar por la Gerencia }
+        vigente: { $ref: '#/components/schemas/VersionParametro' }
+        programada: { allOf: [{ $ref: '#/components/schemas/VersionParametro' }], nullable: true }
+    VersionParametroEntrada:
+      type: object
+      required: [valor, justificacion]
+      properties:
+        valor: { type: string }
+        vigenteDesde:
+          { type: string, format: date-time, nullable: true, description: Vacío = desde ya }
+        justificacion: { type: string, minLength: 5 }
+    Vigencia:
+      type: object
+      properties:
+        id: { type: integer }
+        anio: { type: integer }
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+        cuposTotales: { type: integer }
+        activa: { type: boolean }
+        version: { type: integer }
+    VigenciaNueva:
+      type: object
+      required: [anio, fechaInicio, fechaFin, cuposTotales]
+      properties:
+        anio: { type: integer }
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+        cuposTotales: { type: integer, minimum: 0 }
+    VigenciaEdicion:
+      type: object
+      required: [fechaInicio, fechaFin, cuposTotales]
+      properties:
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+        cuposTotales: { type: integer, minimum: 0 }
+    TextoAutorizacion:
+      type: object
+      properties:
+        version: { type: integer }
+        contenido: { type: string }
+        vigenteDesde: { type: string, format: date-time }
+        creadoPor: { type: string, nullable: true }
+    AutorizacionEstado:
+      type: object
+      properties:
+        vigente: { $ref: '#/components/schemas/TextoAutorizacion' }
+        versiones:
+          type: array
+          items: { $ref: '#/components/schemas/TextoAutorizacion' }
+    AutorizacionEntrada:
+      type: object
+      required: [contenido]
+      properties:
+        contenido: { type: string, minLength: 50, maxLength: 20000 }
+    PlantillaResumen:
+      type: object
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string }
+        version: { type: integer }
+        actualizadaAt: { type: string, format: date-time }
+    PlantillaVersion:
+      type: object
+      properties:
+        version: { type: integer }
+        asunto: { type: string }
+        cuerpo: { type: string }
+        justificacion: { type: string, nullable: true }
+        creadoPor: { type: string, nullable: true }
+        creadoAt: { type: string, format: date-time }
+    Plantilla:
+      type: object
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string }
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              nombre: { type: string }
+              descripcion: { type: string }
+              obligatoria: { type: boolean }
+        vigente: { $ref: '#/components/schemas/PlantillaVersion' }
+        versiones:
+          type: array
+          items: { $ref: '#/components/schemas/PlantillaVersion' }
+    PlantillaEntrada:
+      type: object
+      required: [asunto, cuerpo]
+      properties:
+        asunto: { type: string }
+        cuerpo: { type: string }
+    PlantillaVersionEntrada:
+      type: object
+      required: [asunto, cuerpo]
+      properties:
+        asunto: { type: string }
+        cuerpo: { type: string }
+        justificacion: { type: string, nullable: true }
+    VistaPrevia:
+      type: object
+      properties:
+        asunto: { type: string }
+        cuerpo: { type: string }
+        variablesUsadas:
+          type: array
+          items: { type: string }
+        problemas:
+          type: array
+          items: { type: string }
+    FormularioPreinscripcion:
+      type: object
+      properties:
+        abierta:
+          { type: boolean, description: Hay una vigencia activa y hoy está dentro de sus fechas }
+        anio: { type: integer, nullable: true }
+        tiposIdentificacion:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              codigo: { type: string }
+              nombre: { type: string }
+        localidades:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              nombre: { type: string }
+        barrios:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              nombre: { type: string }
+              localidadId: { type: integer, nullable: true }
+        autorizacion:
+          type: object
+          nullable: true
+          properties:
+            version: { type: integer }
+            contenido: { type: string }
+        formularioToken:
+          {
+            type: string,
+            description: Se devuelve en el envío; sirve para detectar envíos automatizados,
+          }
+    PreinscripcionEntrada:
+      type: object
+      required:
+        [
+          pcdNombre,
+          pcdTipoIdentificacionId,
+          pcdNumero,
+          cuidadorNombre,
+          cuidadorTipoIdentificacionId,
+          cuidadorNumero,
+          correo,
+          aceptaAutorizacion,
+          autorizacionVersion,
+          formularioToken,
+        ]
+      properties:
+        pcdNombre: { type: string }
+        pcdTipoIdentificacionId: { type: integer }
+        pcdNumero: { type: string }
+        cuidadorNombre: { type: string }
+        cuidadorTipoIdentificacionId: { type: integer }
+        cuidadorNumero: { type: string }
+        direccion: { type: string, nullable: true }
+        localidadId: { type: integer, nullable: true }
+        barrioId: { type: integer, nullable: true }
+        correo: { type: string, format: email }
+        aceptaAutorizacion: { type: boolean, enum: [true] }
+        autorizacionVersion: { type: integer }
+        formularioToken: { type: string }
+        contactoAlterno: { type: string, description: 'Campo trampa: debe ir vacío' }
+    PreinscripcionCreada:
+      type: object
+      properties:
+        correoEnmascarado: { type: string, example: 'f****@correo.com' }
+        horasVigenciaEnlace: { type: integer }
+    IdentificacionPcd:
+      type: object
+      required: [tipoIdentificacionId, numero]
+      properties:
+        tipoIdentificacionId: { type: integer }
+        numero: { type: string, description: Identificación de la persona con discapacidad }
+    SesionConsulta:
+      type: object
+      properties:
+        token: { type: string, description: Token de la sesión del ciudadano; se envía como Bearer }
+        expiraEnMinutos: { type: integer }
+    ItemLista:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+    DatosCaracterizacion:
+      type: object
+      description: Todos los campos pueden ser nulos mientras la persona va diligenciando.
+      properties:
+        generoId: { type: integer, nullable: true }
+        telefonoFijo:
+          { type: string, nullable: true, description: '7 dígitos, o 10 con el indicativo 60' }
+        celular: { type: string, nullable: true, description: '10 dígitos que empiezan por 3' }
+        fechaNacimiento: { type: string, format: date, nullable: true }
+        estadoCivilId: { type: integer, nullable: true }
+        tieneHijos: { type: boolean, nullable: true }
+        hijosCantidad: { type: integer, minimum: 1, maximum: 20, nullable: true }
+        hijosEdades:
+          type: array
+          nullable: true
+          description: Una edad por hijo (0 a 100); una posición nula es una edad que falta
+          items: { type: integer, nullable: true }
+        etniaId: { type: integer, nullable: true }
+        escolaridadId: { type: integer, nullable: true }
+        ocupacionId: { type: integer, nullable: true }
+        epsId: { type: integer, nullable: true }
+        embarazo: { type: string, enum: [NO, SI, NO_APLICA], nullable: true }
+        semanasGestacion: { type: integer, minimum: 1, maximum: 42, nullable: true }
+        recibeSubsidios: { type: boolean, nullable: true }
+        subsidioCual: { type: string, nullable: true }
+        tipoTransporteId: { type: integer, nullable: true }
+        justificacionTransporte: { type: string, nullable: true }
+        requiereCuidador: { type: boolean, nullable: true }
+        cuidadorGeneroId: { type: integer, nullable: true }
+        cuidadorTelefonoFijo: { type: string, nullable: true }
+        cuidadorCelular: { type: string, nullable: true }
+        cuidadorCorreo: { type: string, nullable: true }
+    CaracterizacionCambios:
+      allOf:
+        - $ref: '#/components/schemas/DatosCaracterizacion'
+        - type: object
+          required: [version]
+          properties:
+            version:
+              {
+                type: integer,
+                minimum: 0,
+                description: La versión que la persona vio (0 si aún no hay nada guardado),
+              }
+            pcdNombre:
+              {
+                type: string,
+                description: Corrige el nombre de la persona con discapacidad; queda en el historial,
+              }
+            cuidadorNombre:
+              { type: string, description: Solo si el cuidador no figura en otra solicitud }
+    SeccionAvance:
+      type: object
+      properties:
+        codigo:
+          { type: string, enum: [datos-personales, situacion, salud-apoyos, transporte, cuidador] }
+        nombre: { type: string }
+        requeridos: { type: integer }
+        completados: { type: integer }
+        completa: { type: boolean }
+        faltantes:
+          type: array
+          items:
+            type: object
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }
+    Avance:
+      type: object
+      properties:
+        secciones:
+          type: array
+          items: { $ref: '#/components/schemas/SeccionAvance' }
+        requeridos: { type: integer }
+        completados: { type: integer }
+        porcentaje: { type: integer, minimum: 0, maximum: 100 }
+        completa: { type: boolean }
+    CaracterizacionGuardada:
+      type: object
+      properties:
+        version: { type: integer }
+        guardadoAt: { type: string, format: date-time, nullable: true }
+        pcdNombre: { type: string }
+        cuidadorNombre: { type: string }
+        datos: { $ref: '#/components/schemas/DatosCaracterizacion' }
+        avance: { $ref: '#/components/schemas/Avance' }
+    Caracterizacion:
+      type: object
+      properties:
+        solicitud:
+          type: object
+          properties:
+            vigencia: { type: integer }
+            estado:
+              type: object
+              properties:
+                codigo: { type: string }
+                nombre: { type: string }
+            editable: { type: boolean }
+            explicacion: { type: string }
+            siguientePaso: { type: string }
+            radicado: { type: string, nullable: true, example: EST-2026-000123 }
+            radicadaAt: { type: string, format: date-time, nullable: true }
+        pcd:
+          type: object
+          properties:
+            nombre: { type: string }
+            tipoIdentificacion: { $ref: '#/components/schemas/ItemLista' }
+            numero: { type: string }
+            correo: { type: string }
+        cuidador:
+          type: object
+          properties:
+            nombre: { type: string }
+            tipoIdentificacion: { $ref: '#/components/schemas/ItemLista' }
+            numero: { type: string }
+            nombreEditable: { type: boolean }
+        datos: { $ref: '#/components/schemas/DatosCaracterizacion' }
+        avance: { $ref: '#/components/schemas/Avance' }
+        version: { type: integer }
+        guardadoAt: { type: string, format: date-time, nullable: true }
+        catalogos:
+          type: object
+          properties:
+            generos: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            estadosCiviles: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            etnias: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            escolaridades: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            ocupaciones: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            eps: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            tiposTransporte: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+    IdentificacionConsulta:
+      type: object
+      description: Con el radicado, o con el tipo y número de identificación de la persona con discapacidad.
+      properties:
+        radicado: { type: string, pattern: '^EST-[0-9]{4}-[0-9]{6}$', example: EST-2026-000123 }
+        tipoIdentificacionId: { type: integer }
+        numero: { type: string }
+    ArchivoDocumento:
+      type: object
+      nullable: true
+      properties:
+        nombre: { type: string }
+        formato: { type: string, enum: [pdf, jpg, png] }
+        tamanoBytes: { type: integer }
+        sha256: { type: string, description: Hash de integridad del contenido }
+        cargadoAt: { type: string, format: date-time }
+    DocumentoSolicitud:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string }
+        aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
+        obligatorio: { type: boolean }
+        estado: { type: string, enum: [PENDIENTE, CARGADO, RECHAZADO] }
+        reemplazos: { type: integer, description: Cuántas veces se reemplazó el archivo }
+        archivo: { $ref: '#/components/schemas/ArchivoDocumento' }
+        tieneModelo: { type: boolean }
+    DocumentosSolicitud:
+      type: object
+      properties:
+        editable: { type: boolean }
+        reglas:
+          type: object
+          properties:
+            formatos:
+              type: array
+              items: { type: string, enum: [pdf, jpg, png] }
+            maxMb: { type: integer }
+        documentos:
+          type: array
+          items: { $ref: '#/components/schemas/DocumentoSolicitud' }
+        resumen:
+          type: object
+          properties:
+            obligatorios: { type: integer }
+            cargados: { type: integer }
+            completo: { type: boolean }
+    PendienteRadicacion:
+      type: object
+      properties:
+        campo:
+          { type: string, description: 'Nombre del campo, o «documento:ID» si es un documento' }
+        seccion: { type: string }
+        mensaje: { type: string }
+    RevisionSolicitud:
+      type: object
+      properties:
+        completo: { type: boolean }
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/PendienteRadicacion' }
+        documentos:
+          type: array
+          items: { $ref: '#/components/schemas/PendienteRadicacion' }
+    Radicacion:
+      type: object
+      properties:
+        radicado: { type: string, example: EST-2026-000123 }
+        radicadaAt: { type: string, format: date-time }
+        estado:
+          type: object
+          properties:
+            codigo: { type: string }
+            nombre: { type: string }
+        explicacion: { type: string }
+        siguientePaso: { type: string }
+        aviso: { type: string }
+    EstadoSolicitud:
+      type: object
+      properties:
+        vigencia: { type: integer }
+        personaConDiscapacidad: { type: string }
+        correo: { type: string, example: 'f****@correo.com', description: Correo enmascarado }
+        fechaPreinscripcion: { type: string, format: date-time }
+        radicado: { type: string, nullable: true, example: EST-2026-000123 }
+        fechaRadicacion: { type: string, format: date-time, nullable: true }
+        etapa: { type: string }
+        estado:
+          type: object
+          properties:
+            codigo: { type: string }
+            nombre: { type: string }
+        explicacion: { type: string }
+        siguientePaso: { type: string }
+        aviso: { type: string }
+        comunicaciones:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              nombre: { type: string }
+              asunto: { type: string }
+              enviadoAt: { type: string, format: date-time }
+              entrega:
+                {
+                  type: string,
+                  description: 'Pendiente de envío, Enviado, Entregado, No se pudo entregar o No se pudo enviar',
+                }
+    Motivo:
+      type: object
+      required: [motivo]
+      properties:
+        motivo: { type: string, minLength: 5, maxLength: 500 }
+  responses:
+    DemasiadasPeticiones:
+      description: Demasiadas peticiones desde esta conexión (`DEMASIADOS_INTENTOS`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Validacion:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoAutenticado:
+      description: Sin sesión válida o credenciales incorrectas
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    SinPermiso:
+      description: El rol no tiene el permiso necesario
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoEncontrado:
+      description: El recurso no existe
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ReglaDeNegocio:
+      description: La operación viola una regla de negocio
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

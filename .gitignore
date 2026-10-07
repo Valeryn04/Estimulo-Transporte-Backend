@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+uploads/
+coverage/
+*.log
+dev-mail/
+respaldos/
+uploads-restauracion/
