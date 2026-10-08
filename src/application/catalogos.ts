@@ -202,6 +202,36 @@ export class ServicioCatalogos {
     return (await catalogosRepo.porId(this.deps.pool, id)) as ItemCatalogo;
   }
 
+  /** Reordena arrastrando: lleva el elemento a la posición indicada y corre los demás. */
+  async mover(
+    actor: Actor,
+    id: number,
+    orden: number,
+    ctx: ContextoPeticion,
+  ): Promise<ItemCatalogo> {
+    await withTransaction(this.deps.pool, async (tx) => {
+      await fijarActor(tx, actor.id);
+      const actual = await catalogosRepo.porId(tx, id);
+      if (!actual) throw notFound('El elemento no existe', 'ITEM_NO_ENCONTRADO');
+      await catalogosRepo.mover(tx, actual, orden);
+      const despues = await catalogosRepo.porId(tx, id);
+      if (despues && despues.orden !== actual.orden) {
+        await bitacoraRepo.registrar(tx, {
+          usuarioId: actor.id,
+          modulo: MODULO.CATALOGOS,
+          accion: ACCION.CATALOGO_MODIFICADO,
+          entidad: actual.catalogo,
+          entidadId: id,
+          valorAnterior: { orden: actual.orden },
+          valorNuevo: { orden: despues.orden },
+          ip: ctx.ip,
+        });
+      }
+    });
+    memoriaPublica.invalidar();
+    return (await catalogosRepo.porId(this.deps.pool, id)) as ItemCatalogo;
+  }
+
   async cambiarActivo(
     actor: Actor,
     id: number,
@@ -319,6 +349,31 @@ export class ServicioCatalogos {
         valorNuevo: { ...d, orden: (await documentosRepo.porId(tx, id))?.orden },
         ip: ctx.ip,
       });
+    });
+    return (await documentosRepo.porId(this.deps.pool, id)) as NonNullable<
+      Awaited<ReturnType<typeof documentosRepo.porId>>
+    >;
+  }
+
+  async moverDocumento(actor: Actor, id: number, orden: number, ctx: ContextoPeticion) {
+    await withTransaction(this.deps.pool, async (tx) => {
+      await fijarActor(tx, actor.id);
+      const actual = await documentosRepo.porId(tx, id);
+      if (!actual) throw notFound('El documento no existe', 'DOCUMENTO_NO_ENCONTRADO');
+      await documentosRepo.mover(tx, id, orden);
+      const despues = await documentosRepo.porId(tx, id);
+      if (despues && despues.orden !== actual.orden) {
+        await bitacoraRepo.registrar(tx, {
+          usuarioId: actor.id,
+          modulo: MODULO.CATALOGOS,
+          accion: ACCION.DOCUMENTO_REQUERIDO_MODIFICADO,
+          entidad: 'documento_requerido',
+          entidadId: id,
+          valorAnterior: { orden: actual.orden },
+          valorNuevo: { orden: despues.orden },
+          ip: ctx.ip,
+        });
+      }
     });
     return (await documentosRepo.porId(this.deps.pool, id)) as NonNullable<
       Awaited<ReturnType<typeof documentosRepo.porId>>

@@ -938,6 +938,33 @@ paths:
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '422': { $ref: '#/components/responses/Validacion' }
+  /admin/catalogos/items/{id}/mover:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Catálogos]
+      summary: 'Cambiar la posición de un elemento (arrastrar y soltar)'
+      description: 'Lleva el elemento a esa posición y corre los demás: nunca quedan dos con el mismo número.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orden]
+              properties:
+                orden: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemCatalogo' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
   /admin/catalogos/items/{id}/activar:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1087,6 +1114,33 @@ paths:
                   nombre: { type: string }
                   formato: { type: string }
                   tamanoBytes: { type: integer }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/documentos-requeridos/{id}/mover:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Catálogos]
+      summary: 'Cambiar la posición de un documento (arrastrar y soltar)'
+      description: 'Lleva el elemento a esa posición y corre los demás: nunca quedan dos con el mismo número.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orden]
+              properties:
+                orden: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Correcto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }

@@ -127,6 +127,35 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       );
     });
 
+    it('mover (arrastrar y soltar) lleva el elemento a esa posición y corre los demás, y queda en bitácora', async () => {
+      const lista = async () =>
+        (await get('/catalogos/CAUSAL_REVOCATORIA/items?tamano=100')).body.items as {
+          id: number;
+          orden: number;
+        }[];
+      const antes = await lista();
+      expect(antes.length).toBeGreaterThan(2);
+      const ultimo = antes[antes.length - 1]!;
+      const r = await post(`/catalogos/items/${ultimo.id}/mover`, { orden: 1 });
+      expect(r.status).toBe(200);
+      expect(r.body.orden).toBe(1);
+      const despues = await lista();
+      expect(despues[0]!.id).toBe(ultimo.id);
+      expect(despues.map((x) => x.orden)).toEqual(despues.map((_, i) => i + 1));
+      expect(despues.slice(1).map((x) => x.id)).toEqual(antes.slice(0, -1).map((x) => x.id));
+      const b = await e.pool.query(
+        `SELECT valor_anterior, valor_nuevo FROM bitacora WHERE entidad_id = $1 AND accion = 'CATALOGO_MODIFICADO'`,
+        [ultimo.id],
+      );
+      expect(b.rows.at(-1).valor_nuevo.orden).toBe(1);
+      expect((await post(`/catalogos/items/${ultimo.id}/mover`, { orden: 0 })).status).toBe(422);
+      expect((await post(`/catalogos/items/999999/mover`, { orden: 1 })).status).toBe(404);
+      const analista = await crearCuenta(e, 'ANALISTA');
+      expect(
+        (await post(`/catalogos/items/${ultimo.id}/mover`, { orden: 2 }, analista)).status,
+      ).toBe(403);
+    });
+
     it('la base de datos rechaza dos elementos con el mismo orden', async () => {
       await expect(
         e.pool.query(
@@ -244,6 +273,20 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect(docs.filter((d) => d.aplicaA === 'PCD')).toHaveLength(4);
       expect(docs.filter((d) => d.aplicaA === 'CUIDADOR')).toHaveLength(3);
       expect(docs.filter((d) => d.aplicaA === 'COMUN')).toHaveLength(1);
+    });
+
+    it('los documentos también se reordenan arrastrando, sin repetir posiciones', async () => {
+      const lista = async () =>
+        (await get('/documentos-requeridos')).body.items as { id: number; orden: number }[];
+      const antes = (await lista()).sort((a, b) => a.orden - b.orden);
+      const primero = antes[0]!;
+      const r = await post(`/documentos-requeridos/${primero.id}/mover`, { orden: 3 });
+      expect(r.status).toBe(200);
+      expect(r.body.orden).toBe(3);
+      const despues = (await lista()).sort((a, b) => a.orden - b.orden);
+      expect(despues.map((x) => x.orden)).toEqual(despues.map((_, i) => i + 1));
+      expect(despues[2]!.id).toBe(primero.id);
+      expect((await post(`/documentos-requeridos/999999/mover`, { orden: 1 })).status).toBe(404);
     });
 
     it('permite crear, modificar y desactivar un documento, versionado y en bitácora', async () => {

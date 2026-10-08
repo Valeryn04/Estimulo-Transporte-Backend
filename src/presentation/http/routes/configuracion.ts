@@ -15,12 +15,12 @@ const nombre = (campo: string, min = 2, max = 150) =>
     .max(max, `${campo}: máximo ${max} caracteres`);
 
 /** Posición en la lista: cada elemento tiene la suya (si se pide una ocupada, los demás se corren). */
-const orden = z
+const posicion = z
   .number({ error: 'Orden: escriba un número' })
   .int('Orden: escriba un número entero')
   .min(1, 'Orden: desde 1')
-  .max(100000, 'Orden: máximo 100000')
-  .optional();
+  .max(100000, 'Orden: máximo 100000');
+const orden = posicion.optional();
 
 const itemSchema = z.object({
   nombre: nombre('Nombre'),
@@ -33,6 +33,8 @@ const itemSchema = z.object({
   padreId: z.number().int().positive().nullable().optional(),
   orden,
 });
+
+const moverSchema = z.object({ orden: posicion });
 
 const documentoSchema = z.object({
   nombre: nombre('Nombre', 3),
@@ -150,6 +152,12 @@ export function rutasConfiguracion(s: Servicios): Router {
     res.json(await s.catalogos.actualizar(req.actor!, idParam(req), d, contexto(req)));
   });
 
+  /** Reordena: lleva el elemento a la posición indicada (arrastrar y soltar). */
+  r.post('/catalogos/items/:id/mover', catalogos, async (req, res) => {
+    const d = moverSchema.parse(req.body);
+    res.json(await s.catalogos.mover(req.actor!, idParam(req), d.orden, contexto(req)));
+  });
+
   r.post('/catalogos/items/:id/activar', catalogos, async (req, res) => {
     res.json(await s.catalogos.cambiarActivo(req.actor!, idParam(req), true, contexto(req)));
   });
@@ -175,6 +183,11 @@ export function rutasConfiguracion(s: Servicios): Router {
   r.put('/documentos-requeridos/:id', catalogos, async (req, res) => {
     const d = documentoSchema.parse(req.body);
     res.json(await s.catalogos.actualizarDocumento(req.actor!, idParam(req), d, contexto(req)));
+  });
+
+  r.post('/documentos-requeridos/:id/mover', catalogos, async (req, res) => {
+    const d = moverSchema.parse(req.body);
+    res.json(await s.catalogos.moverDocumento(req.actor!, idParam(req), d.orden, contexto(req)));
   });
 
   r.post('/documentos-requeridos/:id/activar', catalogos, async (req, res) => {

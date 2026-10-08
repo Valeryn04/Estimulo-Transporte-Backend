@@ -231,6 +231,19 @@ export const catalogosRepo = {
     }
   },
 
+  /** Lleva el elemento a esa posición dentro de su grupo; los demás se corren. */
+  async mover(
+    db: Queryable,
+    item: { id: number; catalogo: Catalogo; padreId: number | null },
+    posicion: number,
+  ): Promise<void> {
+    await bloquearOrden(db, `catalogo_items:${item.catalogo}`);
+    await renumerar(db, 'catalogo_items', GRUPO, [item.catalogo, item.padreId], {
+      id: item.id,
+      posicion,
+    });
+  },
+
   async fijarActivo(db: Queryable, id: number, activo: boolean): Promise<void> {
     await db.query(`UPDATE catalogo_items SET activo = $2 WHERE id = $1`, [id, activo]);
   },
@@ -362,6 +375,12 @@ export const documentosRepo = {
     if (d.orden !== undefined) {
       await renumerar(db, 'documentos_requeridos', 'TRUE', [], { id, posicion: d.orden });
     }
+  },
+
+  /** Lleva el documento a esa posición de la lista; los demás se corren. */
+  async mover(db: Queryable, id: number, posicion: number): Promise<void> {
+    await bloquearOrden(db, 'documentos_requeridos');
+    await renumerar(db, 'documentos_requeridos', 'TRUE', [], { id, posicion });
   },
 
   async fijarActivo(db: Queryable, id: number, activo: boolean): Promise<void> {
