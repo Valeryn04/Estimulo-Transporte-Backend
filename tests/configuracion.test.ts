@@ -57,6 +57,84 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       ]);
     });
 
+    it('nunca repite el orden: dar la posición de otro elemento lo corre, y las posiciones quedan 1, 2, 3…', async () => {
+      const nombres = async (cat: string) =>
+        (await get(`/catalogos/${cat}/items?tamano=100`)).body.items.map(
+          (x: { nombre: string; orden: number }) => `${x.orden}:${x.nombre}`,
+        );
+      const antes = (await nombres('TIPO_TRANSPORTE')) as string[];
+      expect(antes).toHaveLength(2);
+      // Se pide la posición 1, que ya tiene otro elemento: el nuevo queda primero y los demás bajan.
+      const nuevo = await post('/catalogos/TIPO_TRANSPORTE/items', { nombre: 'Tranvía', orden: 1 });
+      expect(nuevo.status).toBe(201);
+      expect(nuevo.body.orden).toBe(1);
+      const despues = (await nombres('TIPO_TRANSPORTE')) as string[];
+      expect(despues[0]).toBe('1:Tranvía');
+      expect(despues.map((x) => Number(x.split(':')[0]))).toEqual([1, 2, 3]);
+      // Sin indicar posición, queda al final.
+      const ultimo = await post('/catalogos/TIPO_TRANSPORTE/items', { nombre: 'Cable aéreo' });
+      expect(ultimo.body.orden).toBe(4);
+      // Mover el último a la posición 2 corre los que estaban en 2 y 3.
+      const mov = await put(`/catalogos/items/${ultimo.body.id}`, {
+        nombre: 'Cable aéreo',
+        orden: 2,
+      });
+      expect(mov.body.orden).toBe(2);
+      const movido = (await nombres('TIPO_TRANSPORTE')) as string[];
+      expect(movido[1]).toBe('2:Cable aéreo');
+      expect(movido.map((x) => Number(x.split(':')[0]))).toEqual([1, 2, 3, 4]);
+      // Una posición fuera de rango se ajusta; editar sin posición no cambia la que tiene.
+      const fuera = await put(`/catalogos/items/${nuevo.body.id}`, {
+        nombre: 'Tranvía',
+        orden: 99,
+      });
+      expect(fuera.body.orden).toBe(4);
+      const igual = await put(`/catalogos/items/${ultimo.body.id}`, { nombre: 'Cable aéreo' });
+      expect(igual.body.orden).toBe(1);
+      expect((await post('/catalogos/EPS/items', { nombre: 'Cero', orden: 0 })).status).toBe(422);
+      // El que ocupa una posición se puede consultar (la pantalla lo muestra antes de guardar).
+      const ocupante = await get('/catalogos/TIPO_TRANSPORTE/items?orden=1');
+      expect(ocupante.body.items).toHaveLength(1);
+      expect(ocupante.body.items[0].nombre).toBe('Cable aéreo');
+    });
+
+    it('los barrios se ordenan dentro de su localidad, y al cambiar de localidad quedan al final de la nueva', async () => {
+      const localidades = (await get('/catalogos/LOCALIDAD/items')).body.items as { id: number }[];
+      const [a, b] = [localidades[0]!.id, localidades[1]!.id];
+      const lista = async (id: number) =>
+        (await get(`/catalogos/BARRIO/items?padreId=${id}&tamano=100`)).body.items as {
+          id: number;
+          orden: number;
+        }[];
+      const antesB = (await lista(b)).length;
+      const barrio = await post('/catalogos/BARRIO/items', {
+        nombre: 'Barrio de prueba orden',
+        padreId: a,
+        orden: 1,
+      });
+      expect(barrio.body.orden).toBe(1);
+      const enA = await lista(a);
+      expect(enA.map((x) => x.orden)).toEqual(enA.map((_, i) => i + 1));
+      const cambio = await put(`/catalogos/items/${barrio.body.id}`, {
+        nombre: 'Barrio de prueba orden',
+        padreId: b,
+      });
+      expect(cambio.body.orden).toBe(antesB + 1);
+      const trasA = await lista(a);
+      expect(trasA.map((x) => x.orden)).toEqual(trasA.map((_, i) => i + 1));
+      expect((await lista(b)).map((x) => x.orden)).toEqual(
+        Array.from({ length: antesB + 1 }, (_, i) => i + 1),
+      );
+    });
+
+    it('la base de datos rechaza dos elementos con el mismo orden', async () => {
+      await expect(
+        e.pool.query(
+          `UPDATE catalogo_items SET orden = 1 WHERE catalogo = 'TIPO_TRANSPORTE' AND orden = 2`,
+        ),
+      ).rejects.toMatchObject({ code: '23505' });
+    });
+
     it('crea un elemento con código automático, lo modifica y guarda cada versión con su autor', async () => {
       const c = await post('/catalogos/EPS/items', { nombre: 'Salud Ejemplo', orden: 20 });
       expect(c.status).toBe(201);

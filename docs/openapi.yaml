@@ -869,6 +869,12 @@ paths:
             schema: { type: integer },
             description: Solo barrios de esa localidad,
           }
+        - {
+            name: orden,
+            in: query,
+            schema: { type: integer, minimum: 1 },
+            description: Solo el elemento que ocupa esa posición,
+          }
         - { name: pagina, in: query, schema: { type: integer, default: 1 } }
         - { name: tamano, in: query, schema: { type: integer, default: 25, maximum: 100 } }
       responses:
@@ -1602,7 +1608,12 @@ components:
         nombre: { type: string }
         codigo: { type: string, description: Opcional; obligatorio en tipos de identificación }
         padreId: { type: integer, nullable: true, description: Obligatorio en barrios }
-        orden: { type: integer, default: 0 }
+        orden:
+          {
+            type: integer,
+            minimum: 1,
+            description: 'Posición en la lista (única). Si ya la ocupa otro elemento, los demás se corren. Sin indicarla, queda al final o conserva la suya.',
+          }
     VersionRegistro:
       type: object
       properties:
@@ -1639,7 +1650,12 @@ components:
         descripcion: { type: string }
         aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
         obligatorio: { type: boolean }
-        orden: { type: integer }
+        orden:
+          {
+            type: integer,
+            minimum: 1,
+            description: 'Posición en la lista (única). Si ya la ocupa otro documento, los demás se corren.',
+          }
     VersionParametro:
       type: object
       properties:

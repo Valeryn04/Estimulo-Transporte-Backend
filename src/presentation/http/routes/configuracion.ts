@@ -14,7 +14,13 @@ const nombre = (campo: string, min = 2, max = 150) =>
     .min(min, `${campo}: escriba al menos ${min} caracteres`)
     .max(max, `${campo}: máximo ${max} caracteres`);
 
-const orden = z.number({ error: 'Orden: escriba un número' }).int().min(0).max(100000).default(0);
+/** Posición en la lista: cada elemento tiene la suya (si se pide una ocupada, los demás se corren). */
+const orden = z
+  .number({ error: 'Orden: escriba un número' })
+  .int('Orden: escriba un número entero')
+  .min(1, 'Orden: desde 1')
+  .max(100000, 'Orden: máximo 100000')
+  .optional();
 
 const itemSchema = z.object({
   nombre: nombre('Nombre'),
@@ -40,6 +46,7 @@ const filtroItemsSchema = paginacionSchema.extend({
   q: z.string().trim().max(100).optional(),
   activo: z.enum(['true', 'false']).optional(),
   padreId: z.coerce.number().int().positive().optional(),
+  orden: z.coerce.number().int().min(1).optional(),
 });
 
 const versionParametroSchema = z.object({
@@ -122,6 +129,7 @@ export function rutasConfiguracion(s: Servicios): Router {
       q: f.q || undefined,
       activo: f.activo === undefined ? undefined : f.activo === 'true',
       padreId: f.padreId,
+      orden: f.orden,
       limit: f.tamano,
       offset: (f.pagina - 1) * f.tamano,
     });
