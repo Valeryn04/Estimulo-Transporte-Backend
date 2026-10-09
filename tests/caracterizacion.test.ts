@@ -384,6 +384,13 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
       });
       expect(masculino.status).toBe(422);
       expect(masculino.body.error.errores[0].campo).toBe('embarazo');
+      const femenino = await guardar(p.token, {
+        version: 3,
+        generoId: idDe(c.generos, 'FEMENINO'),
+        embarazo: 'NO_APLICA',
+      });
+      expect(femenino.status).toBe(422);
+      expect(femenino.body.error.errores[0].campo).toBe('embarazo');
     });
 
     it('subsidios: pide cuál solo si recibe otros y lo borra si dice que no', async () => {

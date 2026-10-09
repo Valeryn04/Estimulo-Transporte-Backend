@@ -73,7 +73,39 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       await post('/catalogos/ETNIA/items', { nombre: 'Rrom' });
       const etnias = await nombres('ETNIA');
       expect(etnias.slice(-3)).toEqual(['Rrom', 'Ninguna', 'N/A']);
-      expect((await nombres('EPS')).at(-1)).toBe('Ninguna');
+    });
+
+    it('«Ninguna» y «N/A» solo van en las listas que corresponden, con nombre y código fijos', async () => {
+      const rechazo = async (cat: string, nombre: string) => {
+        const r = await post(`/catalogos/${cat}/items`, { nombre });
+        expect(r.status, `${cat} ${nombre}`).toBe(422);
+        return r.body.error.errores[0].mensaje as string;
+      };
+      // Género y estado civil: solo «N/A». EPS, transporte, localidades y causales: ninguna de las dos.
+      expect(await rechazo('GENERO', 'Ninguno')).toContain('no lleva la opción «Ninguna»');
+      expect(await rechazo('ESTADO_CIVIL', 'ninguna')).toContain('no lleva la opción «Ninguna»');
+      expect(await rechazo('EPS', 'Ninguna')).toContain('no lleva la opción «Ninguna»');
+      expect(await rechazo('EPS', 'N/A')).toContain('no lleva la opción «N/A»');
+      expect(await rechazo('TIPO_TRANSPORTE', 'No aplica')).toContain('no lleva la opción «N/A»');
+      // Etnia, escolaridad y ocupación llevan las dos y ya existen: no se repiten con otra escritura.
+      expect(await rechazo('ETNIA', 'No aplica')).toContain('ya existe');
+      expect(await rechazo('OCUPACION', 'Ninguno')).toContain('ya existe');
+      // La EPS no tiene esas opciones activas.
+      const eps = (await get('/catalogos/EPS/items?activo=true&tamano=100')).body.items as {
+        codigo: string;
+      }[];
+      expect(eps.some((x) => x.codigo === 'NINGUNA' || x.codigo === 'NA')).toBe(false);
+      // Una opción de cierre no se renombra, y otra opción no puede tomar ese nombre.
+      const etnias = (await get('/catalogos/ETNIA/items?tamano=100')).body.items as {
+        id: number;
+        codigo: string;
+        nombre: string;
+      }[];
+      const ninguna = etnias.find((x) => x.codigo === 'NINGUNA')!;
+      const renombre = await put(`/catalogos/items/${ninguna.id}`, { nombre: 'Sin etnia' });
+      expect(renombre.status).toBe(422);
+      const otra = etnias.find((x) => x.codigo === 'RAIZAL')!;
+      expect((await put(`/catalogos/items/${otra.id}`, { nombre: 'N/A' })).status).toBe(422);
     });
 
     it('crea un elemento con código automático, lo modifica y guarda cada versión con su autor', async () => {
@@ -167,7 +199,8 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect((await post(`/catalogos/items/${eps.id}/desactivar`)).status).toBe(409);
       expect((await post(`/catalogos/items/${eps.id}/activar`)).body.activo).toBe(true);
       const inactivos = await get('/catalogos/EPS/items?activo=false');
-      expect(inactivos.body.total).toBe(0);
+      // Solo queda inactiva la «Ninguna» que se retiró de la EPS (migración 013).
+      expect(inactivos.body.items.map((x: { codigo: string }) => x.codigo)).toEqual(['NINGUNA']);
     });
 
     it('rechaza una lista inexistente', async () => {

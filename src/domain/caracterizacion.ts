@@ -164,6 +164,12 @@ export function erroresDeConsistencia(
       mensaje: 'Estado de embarazo: no es coherente con el género indicado; revise ambos datos',
     });
   }
+  if (d.embarazo === 'NO_APLICA' && ctx.generoCodigo === 'FEMENINO') {
+    e.push({
+      campo: 'embarazo',
+      mensaje: 'Estado de embarazo: «No aplica» no corresponde al género indicado; elija Sí o No',
+    });
+  }
   if (d.hijosEdades) {
     const mayor = d.hijosEdades.findIndex((x) => x !== null && x > MAX_EDAD_HIJO);
     if (mayor >= 0) {

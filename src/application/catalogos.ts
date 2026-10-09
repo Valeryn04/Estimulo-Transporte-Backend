@@ -1,4 +1,9 @@
 import { ACCION, MODULO } from '../domain/acciones.js';
+import {
+  esCodigoDeCierre,
+  resolverOpcionDeCierre,
+  tipoDeOpcion,
+} from '../domain/opciones-especiales.js';
 import { codigoDesdeNombre } from '../domain/texto.js';
 import { memoriaPublica } from '../infrastructure/cache.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
@@ -103,12 +108,25 @@ export class ServicioCatalogos {
     d: DatosItem,
     ctx: ContextoPeticion,
   ): Promise<ItemCatalogo> {
+    // «Ninguna/Ninguno» y «N/A» solo van en algunas listas y con nombre y código fijos.
+    const cierre = resolverOpcionDeCierre(catalogo, d.nombre);
+    if (cierre && 'error' in cierre) {
+      throw errorValidacion([{ campo: 'nombre', mensaje: cierre.error }]);
+    }
     if (catalogo === 'TIPO_IDENTIFICACION' && !d.codigo) {
       throw errorValidacion([
         { campo: 'codigo', mensaje: 'Código: escriba la sigla del tipo de identificación' },
       ]);
     }
-    const codigo = d.codigo ?? codigoDesdeNombre(d.nombre, PREFIJO[catalogo] ?? '');
+    const nombre = cierre ? cierre.opcion.nombre : d.nombre;
+    const codigo = cierre
+      ? cierre.opcion.codigo
+      : (d.codigo ?? codigoDesdeNombre(d.nombre, PREFIJO[catalogo] ?? ''));
+    if (!cierre && esCodigoDeCierre(codigo)) {
+      throw errorValidacion([
+        { campo: 'codigo', mensaje: 'Código: está reservado para «Ninguna» y «N/A»' },
+      ]);
+    }
     if (!/^[A-Z0-9_]{1,40}$/.test(codigo)) {
       throw errorValidacion([
         { campo: 'codigo', mensaje: 'Código: use solo letras, números y guion bajo' },
@@ -122,7 +140,7 @@ export class ServicioCatalogos {
         nuevo = await catalogosRepo.crear(tx, {
           catalogo,
           codigo,
-          nombre: d.nombre,
+          nombre,
           padreId,
         });
       } catch (error) {
@@ -134,7 +152,7 @@ export class ServicioCatalogos {
         accion: ACCION.CATALOGO_CREADO,
         entidad: catalogo,
         entidadId: nuevo,
-        valorNuevo: { codigo, nombre: d.nombre, padreId },
+        valorNuevo: { codigo, nombre, padreId },
         ip: ctx.ip,
       });
       return nuevo;
@@ -154,8 +172,29 @@ export class ServicioCatalogos {
       const actual = await catalogosRepo.porId(tx, id);
       if (!actual) throw notFound('El elemento no existe', 'ITEM_NO_ENCONTRADO');
       const padreId = await this.validarPadre(tx, actual.catalogo, d.padreId);
+      let nombre = d.nombre;
+      if (esCodigoDeCierre(actual.codigo)) {
+        // «Ninguna/Ninguno» y «N/A» conservan su nombre oficial.
+        if (tipoDeOpcion(d.nombre) !== tipoDeOpcion(actual.nombre)) {
+          throw errorValidacion([
+            {
+              campo: 'nombre',
+              mensaje: `Nombre: «${actual.nombre}» es una opción de cierre y no se puede cambiar por otro nombre`,
+            },
+          ]);
+        }
+        nombre = actual.nombre;
+      } else if (tipoDeOpcion(d.nombre)) {
+        throw errorValidacion([
+          {
+            campo: 'nombre',
+            mensaje:
+              'Nombre: «Ninguna» y «N/A» se agregan como opción nueva de la lista, no cambiando otra',
+          },
+        ]);
+      }
       try {
-        await catalogosRepo.actualizar(tx, id, { nombre: d.nombre, padreId });
+        await catalogosRepo.actualizar(tx, id, { nombre, padreId });
       } catch (error) {
         traducirErrorCatalogo(error);
       }
@@ -166,7 +205,7 @@ export class ServicioCatalogos {
         entidad: actual.catalogo,
         entidadId: id,
         valorAnterior: { nombre: actual.nombre, padreId: actual.padreId },
-        valorNuevo: { nombre: d.nombre, padreId },
+        valorNuevo: { nombre, padreId },
         ip: ctx.ip,
       });
     });
