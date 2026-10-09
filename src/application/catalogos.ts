@@ -42,17 +42,6 @@ export function traducirErrorCatalogo(error: unknown, codigoAutomatico = false):
       ]);
     }
   }
-  if (
-    e.code === '23505' &&
-    (e.constraint === 'uq_catalogo_orden' || e.constraint === 'uq_documento_orden')
-  ) {
-    throw errorValidacion([
-      {
-        campo: 'orden',
-        mensaje: 'Orden: otra persona acaba de usar esa posición, vuelva a intentarlo',
-      },
-    ]);
-  }
   if (e.code === '23514' && e.message?.includes('localidad')) {
     throw errorValidacion([
       { campo: 'padreId', mensaje: 'Localidad: seleccione una localidad válida' },
@@ -65,8 +54,6 @@ export interface DatosItem {
   nombre: string;
   codigo?: string;
   padreId?: number | null;
-  /** Posición en la lista (desde 1). Sin indicarla, queda al final o conserva la suya. */
-  orden?: number;
 }
 
 /** Catálogos del programa y documentos exigidos (RF-ADM-02, RN-05, RN-06). */
@@ -137,7 +124,6 @@ export class ServicioCatalogos {
           codigo,
           nombre: d.nombre,
           padreId,
-          orden: d.orden,
         });
       } catch (error) {
         traducirErrorCatalogo(error, !d.codigo);
@@ -148,12 +134,7 @@ export class ServicioCatalogos {
         accion: ACCION.CATALOGO_CREADO,
         entidad: catalogo,
         entidadId: nuevo,
-        valorNuevo: {
-          codigo,
-          nombre: d.nombre,
-          padreId,
-          orden: (await catalogosRepo.porId(tx, nuevo))?.orden,
-        },
+        valorNuevo: { codigo, nombre: d.nombre, padreId },
         ip: ctx.ip,
       });
       return nuevo;
@@ -174,12 +155,7 @@ export class ServicioCatalogos {
       if (!actual) throw notFound('El elemento no existe', 'ITEM_NO_ENCONTRADO');
       const padreId = await this.validarPadre(tx, actual.catalogo, d.padreId);
       try {
-        await catalogosRepo.actualizar(
-          tx,
-          id,
-          { nombre: d.nombre, padreId, orden: d.orden },
-          { catalogo: actual.catalogo, padreId: actual.padreId },
-        );
+        await catalogosRepo.actualizar(tx, id, { nombre: d.nombre, padreId });
       } catch (error) {
         traducirErrorCatalogo(error);
       }
@@ -189,44 +165,10 @@ export class ServicioCatalogos {
         accion: ACCION.CATALOGO_MODIFICADO,
         entidad: actual.catalogo,
         entidadId: id,
-        valorAnterior: { nombre: actual.nombre, padreId: actual.padreId, orden: actual.orden },
-        valorNuevo: {
-          nombre: d.nombre,
-          padreId,
-          orden: (await catalogosRepo.porId(tx, id))?.orden,
-        },
+        valorAnterior: { nombre: actual.nombre, padreId: actual.padreId },
+        valorNuevo: { nombre: d.nombre, padreId },
         ip: ctx.ip,
       });
-    });
-    memoriaPublica.invalidar();
-    return (await catalogosRepo.porId(this.deps.pool, id)) as ItemCatalogo;
-  }
-
-  /** Reordena arrastrando: lleva el elemento a la posición indicada y corre los demás. */
-  async mover(
-    actor: Actor,
-    id: number,
-    orden: number,
-    ctx: ContextoPeticion,
-  ): Promise<ItemCatalogo> {
-    await withTransaction(this.deps.pool, async (tx) => {
-      await fijarActor(tx, actor.id);
-      const actual = await catalogosRepo.porId(tx, id);
-      if (!actual) throw notFound('El elemento no existe', 'ITEM_NO_ENCONTRADO');
-      await catalogosRepo.mover(tx, actual, orden);
-      const despues = await catalogosRepo.porId(tx, id);
-      if (despues && despues.orden !== actual.orden) {
-        await bitacoraRepo.registrar(tx, {
-          usuarioId: actor.id,
-          modulo: MODULO.CATALOGOS,
-          accion: ACCION.CATALOGO_MODIFICADO,
-          entidad: actual.catalogo,
-          entidadId: id,
-          valorAnterior: { orden: actual.orden },
-          valorNuevo: { orden: despues.orden },
-          ip: ctx.ip,
-        });
-      }
     });
     memoriaPublica.invalidar();
     return (await catalogosRepo.porId(this.deps.pool, id)) as ItemCatalogo;
@@ -313,7 +255,7 @@ export class ServicioCatalogos {
         accion: ACCION.DOCUMENTO_REQUERIDO_CREADO,
         entidad: 'documento_requerido',
         entidadId: nuevo,
-        valorNuevo: { codigo, ...d, orden: (await documentosRepo.porId(tx, nuevo))?.orden },
+        valorNuevo: { codigo, ...d },
         ip: ctx.ip,
       });
       return nuevo;
@@ -344,36 +286,10 @@ export class ServicioCatalogos {
           descripcion: actual.descripcion,
           aplicaA: actual.aplicaA as AplicaA,
           obligatorio: actual.obligatorio,
-          orden: actual.orden,
         },
-        valorNuevo: { ...d, orden: (await documentosRepo.porId(tx, id))?.orden },
+        valorNuevo: d,
         ip: ctx.ip,
       });
-    });
-    return (await documentosRepo.porId(this.deps.pool, id)) as NonNullable<
-      Awaited<ReturnType<typeof documentosRepo.porId>>
-    >;
-  }
-
-  async moverDocumento(actor: Actor, id: number, orden: number, ctx: ContextoPeticion) {
-    await withTransaction(this.deps.pool, async (tx) => {
-      await fijarActor(tx, actor.id);
-      const actual = await documentosRepo.porId(tx, id);
-      if (!actual) throw notFound('El documento no existe', 'DOCUMENTO_NO_ENCONTRADO');
-      await documentosRepo.mover(tx, id, orden);
-      const despues = await documentosRepo.porId(tx, id);
-      if (despues && despues.orden !== actual.orden) {
-        await bitacoraRepo.registrar(tx, {
-          usuarioId: actor.id,
-          modulo: MODULO.CATALOGOS,
-          accion: ACCION.DOCUMENTO_REQUERIDO_MODIFICADO,
-          entidad: 'documento_requerido',
-          entidadId: id,
-          valorAnterior: { orden: actual.orden },
-          valorNuevo: { orden: despues.orden },
-          ip: ctx.ip,
-        });
-      }
     });
     return (await documentosRepo.porId(this.deps.pool, id)) as NonNullable<
       Awaited<ReturnType<typeof documentosRepo.porId>>

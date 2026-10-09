@@ -869,12 +869,6 @@ paths:
             schema: { type: integer },
             description: Solo barrios de esa localidad,
           }
-        - {
-            name: orden,
-            in: query,
-            schema: { type: integer, minimum: 1 },
-            description: Solo el elemento que ocupa esa posición,
-          }
         - { name: pagina, in: query, schema: { type: integer, default: 1 } }
         - { name: tamano, in: query, schema: { type: integer, default: 25, maximum: 100 } }
       responses:
@@ -928,33 +922,6 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ItemEntrada' }
-      responses:
-        '200':
-          description: Correcto
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ItemCatalogo' }
-        '401': { $ref: '#/components/responses/NoAutenticado' }
-        '403': { $ref: '#/components/responses/SinPermiso' }
-        '404': { $ref: '#/components/responses/NoEncontrado' }
-        '422': { $ref: '#/components/responses/Validacion' }
-  /admin/catalogos/items/{id}/mover:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: integer } }
-    post:
-      tags: [Catálogos]
-      summary: 'Cambiar la posición de un elemento (arrastrar y soltar)'
-      description: 'Lleva el elemento a esa posición y corre los demás: nunca quedan dos con el mismo número.'
-      security: [{ bearerInterno: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [orden]
-              properties:
-                orden: { type: integer, minimum: 1 }
       responses:
         '200':
           description: Correcto
@@ -1114,33 +1081,6 @@ paths:
                   nombre: { type: string }
                   formato: { type: string }
                   tamanoBytes: { type: integer }
-        '401': { $ref: '#/components/responses/NoAutenticado' }
-        '403': { $ref: '#/components/responses/SinPermiso' }
-        '404': { $ref: '#/components/responses/NoEncontrado' }
-        '422': { $ref: '#/components/responses/Validacion' }
-  /admin/documentos-requeridos/{id}/mover:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: integer } }
-    post:
-      tags: [Catálogos]
-      summary: 'Cambiar la posición de un documento (arrastrar y soltar)'
-      description: 'Lleva el elemento a esa posición y corre los demás: nunca quedan dos con el mismo número.'
-      security: [{ bearerInterno: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [orden]
-              properties:
-                orden: { type: integer, minimum: 1 }
-      responses:
-        '200':
-          description: Correcto
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/DocumentoRequerido' }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
@@ -1651,7 +1591,6 @@ components:
         nombre: { type: string }
         padreId: { type: integer, nullable: true, description: Localidad del barrio }
         padreNombre: { type: string, nullable: true }
-        orden: { type: integer }
         activo: { type: boolean }
         version: { type: integer }
         updatedAt: { type: string, format: date-time }
@@ -1662,12 +1601,6 @@ components:
         nombre: { type: string }
         codigo: { type: string, description: Opcional; obligatorio en tipos de identificación }
         padreId: { type: integer, nullable: true, description: Obligatorio en barrios }
-        orden:
-          {
-            type: integer,
-            minimum: 1,
-            description: 'Posición en la lista (única). Si ya la ocupa otro elemento, los demás se corren. Sin indicarla, queda al final o conserva la suya.',
-          }
     VersionRegistro:
       type: object
       properties:
@@ -1684,7 +1617,6 @@ components:
         descripcion: { type: string }
         aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
         obligatorio: { type: boolean }
-        orden: { type: integer }
         activo: { type: boolean }
         version: { type: integer }
         modelo:
@@ -1704,12 +1636,6 @@ components:
         descripcion: { type: string }
         aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
         obligatorio: { type: boolean }
-        orden:
-          {
-            type: integer,
-            minimum: 1,
-            description: 'Posición en la lista (única). Si ya la ocupa otro documento, los demás se corren.',
-          }
     VersionParametro:
       type: object
       properties:

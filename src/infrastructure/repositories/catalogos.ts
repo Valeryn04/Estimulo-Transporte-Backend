@@ -23,7 +23,6 @@ export interface ItemCatalogo {
   nombre: string;
   padreId: number | null;
   padreNombre: string | null;
-  orden: number;
   activo: boolean;
   version: number;
   updatedAt: Date;
@@ -36,14 +35,13 @@ interface Fila {
   nombre: string;
   padre_id: number | null;
   padre_nombre: string | null;
-  orden: number;
   activo: boolean;
   version: number;
   updated_at: Date;
 }
 
 const SELECT = `SELECT c.id, c.catalogo, c.codigo, c.nombre, c.padre_id, p.nombre AS padre_nombre,
-                       c.orden, c.activo, c.version, c.updated_at
+                       c.activo, c.version, c.updated_at
                   FROM catalogo_items c LEFT JOIN catalogo_items p ON p.id = c.padre_id`;
 
 const mapear = (f: Fila): ItemCatalogo => ({
@@ -53,7 +51,6 @@ const mapear = (f: Fila): ItemCatalogo => ({
   nombre: f.nombre,
   padreId: f.padre_id,
   padreNombre: f.padre_nombre,
-  orden: f.orden,
   activo: f.activo,
   version: f.version,
   updatedAt: f.updated_at,
@@ -63,7 +60,6 @@ export interface FiltroItems {
   q?: string;
   activo?: boolean;
   padreId?: number;
-  orden?: number;
   limit: number;
   offset: number;
 }
@@ -75,47 +71,18 @@ export interface VersionRegistro {
   creadoAt: Date;
 }
 
-const escaparLike = (t: string) => t.replace(/[\\%_]/g, (c) => `\\${c}`);
-
 /**
- * El orden de una lista es una posición propia (1, 2, 3…): nunca hay dos elementos con el mismo número.
- * Reescribe las posiciones de un grupo; si se indica `mover`, ese elemento queda en la posición pedida y los demás
- * se corren (la posición se ajusta al rango válido). La restricción única se revisa al final de la transacción.
+ * Orden en que se muestran las opciones de un desplegable: las propias de la lista en el orden en que se crearon
+ * (los barrios, de la A a la Z) y, siempre al final, «Otro», «Ninguna/Ninguno» y «N/A». Así una opción nueva
+ * nunca queda después de esas.
  */
-async function renumerar(
-  db: Queryable,
-  tabla: 'catalogo_items' | 'documentos_requeridos',
-  donde: string,
-  params: unknown[],
-  mover?: { id: number; posicion: number },
-): Promise<void> {
-  const r = await db.query<{ id: number; orden: number }>(
-    `SELECT id, orden FROM ${tabla} WHERE ${donde} ORDER BY orden, id FOR UPDATE`,
-    params,
-  );
-  const actual = new Map(r.rows.map((x) => [x.id, x.orden]));
-  let ids = r.rows.map((x) => x.id);
-  if (mover) {
-    ids = ids.filter((i) => i !== mover.id);
-    ids.splice(Math.min(Math.max(mover.posicion, 1), ids.length + 1) - 1, 0, mover.id);
-  }
-  const cambios = ids
-    .map((id, i) => ({ id, orden: i + 1 }))
-    .filter((c) => actual.get(c.id) !== c.orden);
-  if (cambios.length === 0) return;
-  await db.query(
-    `UPDATE ${tabla} t SET orden = v.orden
-       FROM unnest($1::int[], $2::int[]) AS v(id, orden) WHERE t.id = v.id`,
-    [cambios.map((c) => c.id), cambios.map((c) => c.orden)],
-  );
-}
+export const ORDEN_OPCIONES = (alias = '') => {
+  const c = alias ? `${alias}.` : '';
+  return `CASE ${c}codigo WHEN 'OTRO' THEN 1 WHEN 'NINGUNA' THEN 2 WHEN 'NINGUNO' THEN 2 WHEN 'NA' THEN 3 ELSE 0 END,
+        CASE WHEN ${c}catalogo = 'BARRIO' THEN ${c}nombre END, ${c}id`;
+};
 
-/** Evita que dos personas reordenen la misma lista al mismo tiempo. */
-async function bloquearOrden(db: Queryable, clave: string): Promise<void> {
-  await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`orden:${clave}`]);
-}
-
-const GRUPO = 'catalogo = $1 AND padre_id IS NOT DISTINCT FROM $2::integer';
+const escaparLike = (t: string) => t.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export const catalogosRepo = {
   async resumen(db: Queryable): Promise<{ catalogo: Catalogo; total: number; activos: number }[]> {
@@ -146,17 +113,13 @@ export const catalogosRepo = {
       params.push(f.padreId);
       where.push(`c.padre_id = $${params.length}`);
     }
-    if (f.orden !== undefined) {
-      params.push(f.orden);
-      where.push(`c.orden = $${params.length}`);
-    }
     params.push(f.limit, f.offset);
     const r = await db.query<Fila & { total: number }>(
-      `SELECT c.id, c.catalogo, c.codigo, c.nombre, c.padre_id, p.nombre AS padre_nombre, c.orden,
+      `SELECT c.id, c.catalogo, c.codigo, c.nombre, c.padre_id, p.nombre AS padre_nombre,
               c.activo, c.version, c.updated_at, COUNT(*) OVER() AS total
          FROM catalogo_items c LEFT JOIN catalogo_items p ON p.id = c.padre_id
         WHERE ${where.join(' AND ')}
-        ORDER BY c.orden, c.nombre
+        ORDER BY ${ORDEN_OPCIONES('c')}
         LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
@@ -168,80 +131,28 @@ export const catalogosRepo = {
     return r.rows[0] ? mapear(r.rows[0]) : null;
   },
 
-  /** Crea el elemento al final de su grupo; si se indica `orden`, lo coloca en esa posición. */
   async crear(
     db: Queryable,
-    d: {
-      catalogo: Catalogo;
-      codigo: string;
-      nombre: string;
-      padreId: number | null;
-      orden?: number;
-    },
+    d: { catalogo: Catalogo; codigo: string; nombre: string; padreId: number | null },
   ): Promise<number> {
-    await bloquearOrden(db, `catalogo_items:${d.catalogo}`);
-    const posicion = await db.query<{ p: number }>(
-      `SELECT LEAST(COALESCE($3::integer, 2147483647), COALESCE(MAX(orden), 0) + 1) AS p
-         FROM catalogo_items WHERE ${GRUPO}`,
-      [d.catalogo, d.padreId, d.orden ?? null],
-    );
-    const p = (posicion.rows[0] as { p: number }).p;
-    await db.query(
-      `UPDATE catalogo_items SET orden = orden + 1 WHERE ${GRUPO} AND orden >= $3::integer`,
-      [d.catalogo, d.padreId, p],
-    );
     const r = await db.query<{ id: number }>(
-      `INSERT INTO catalogo_items (catalogo, codigo, nombre, padre_id, orden)
-       VALUES ($1, $2, $3, $4::integer, $5) RETURNING id`,
-      [d.catalogo, d.codigo, d.nombre, d.padreId, p],
+      `INSERT INTO catalogo_items (catalogo, codigo, nombre, padre_id)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [d.catalogo, d.codigo, d.nombre, d.padreId],
     );
     return (r.rows[0] as { id: number }).id;
   },
 
-  /**
-   * Actualiza el elemento. Con `orden` lo mueve a esa posición (los demás se corren); sin `orden` conserva su
-   * posición, salvo que cambie de localidad: entonces queda al final del grupo nuevo.
-   */
   async actualizar(
     db: Queryable,
     id: number,
-    d: { nombre: string; padreId: number | null; orden?: number },
-    previo: { catalogo: Catalogo; padreId: number | null },
+    d: { nombre: string; padreId: number | null },
   ): Promise<void> {
-    await bloquearOrden(db, `catalogo_items:${previo.catalogo}`);
-    const cambiaGrupo = previo.padreId !== d.padreId;
-    if (cambiaGrupo) {
-      await db.query(
-        `UPDATE catalogo_items
-            SET nombre = $2, padre_id = $3::integer,
-                orden = (SELECT COALESCE(MAX(orden), 0) + 1 FROM catalogo_items
-                          WHERE catalogo = $4 AND padre_id IS NOT DISTINCT FROM $3::integer)
-          WHERE id = $1`,
-        [id, d.nombre, d.padreId, previo.catalogo],
-      );
-      await renumerar(db, 'catalogo_items', GRUPO, [previo.catalogo, previo.padreId]);
-    } else {
-      await db.query(`UPDATE catalogo_items SET nombre = $2 WHERE id = $1`, [id, d.nombre]);
-    }
-    if (d.orden !== undefined) {
-      await renumerar(db, 'catalogo_items', GRUPO, [previo.catalogo, d.padreId], {
-        id,
-        posicion: d.orden,
-      });
-    }
-  },
-
-  /** Lleva el elemento a esa posición dentro de su grupo; los demás se corren. */
-  async mover(
-    db: Queryable,
-    item: { id: number; catalogo: Catalogo; padreId: number | null },
-    posicion: number,
-  ): Promise<void> {
-    await bloquearOrden(db, `catalogo_items:${item.catalogo}`);
-    await renumerar(db, 'catalogo_items', GRUPO, [item.catalogo, item.padreId], {
-      id: item.id,
-      posicion,
-    });
+    await db.query(`UPDATE catalogo_items SET nombre = $2, padre_id = $3 WHERE id = $1`, [
+      id,
+      d.nombre,
+      d.padreId,
+    ]);
   },
 
   async fijarActivo(db: Queryable, id: number, activo: boolean): Promise<void> {
@@ -287,7 +198,6 @@ export interface DocumentoRequerido {
   descripcion: string;
   aplicaA: AplicaA;
   obligatorio: boolean;
-  orden: number;
   activo: boolean;
   version: number;
 }
@@ -299,7 +209,6 @@ interface FilaDoc {
   descripcion: string;
   aplica_a: AplicaA;
   obligatorio: boolean;
-  orden: number;
   activo: boolean;
   version: number;
 }
@@ -311,26 +220,23 @@ const mapearDoc = (f: FilaDoc): DocumentoRequerido => ({
   descripcion: f.descripcion,
   aplicaA: f.aplica_a,
   obligatorio: f.obligatorio,
-  orden: f.orden,
   activo: f.activo,
   version: f.version,
 });
 
-const COLS_DOC = 'id, codigo, nombre, descripcion, aplica_a, obligatorio, orden, activo, version';
+const COLS_DOC = 'id, codigo, nombre, descripcion, aplica_a, obligatorio, activo, version';
 
 export interface DatosDocumento {
   nombre: string;
   descripcion: string;
   aplicaA: AplicaA;
   obligatorio: boolean;
-  /** Posición en la lista (desde 1). Sin indicarla, el documento queda al final o conserva la suya. */
-  orden?: number;
 }
 
 export const documentosRepo = {
   async listar(db: Queryable): Promise<DocumentoRequerido[]> {
     const r = await db.query<FilaDoc>(
-      `SELECT ${COLS_DOC} FROM documentos_requeridos ORDER BY activo DESC, orden, id`,
+      `SELECT ${COLS_DOC} FROM documentos_requeridos ORDER BY activo DESC, id`,
     );
     return r.rows.map(mapearDoc);
   },
@@ -343,44 +249,21 @@ export const documentosRepo = {
     return r.rows[0] ? mapearDoc(r.rows[0]) : null;
   },
 
-  /** Crea el documento al final de la lista; si se indica `orden`, lo coloca en esa posición. */
   async crear(db: Queryable, codigo: string, d: DatosDocumento): Promise<number> {
-    await bloquearOrden(db, 'documentos_requeridos');
-    const posicion = await db.query<{ p: number }>(
-      `SELECT LEAST(COALESCE($1::integer, 2147483647), COALESCE(MAX(orden), 0) + 1) AS p
-         FROM documentos_requeridos`,
-      [d.orden ?? null],
-    );
-    const p = (posicion.rows[0] as { p: number }).p;
-    await db.query(
-      `UPDATE documentos_requeridos SET orden = orden + 1 WHERE orden >= $1::integer`,
-      [p],
-    );
     const r = await db.query<{ id: number }>(
-      `INSERT INTO documentos_requeridos (codigo, nombre, descripcion, aplica_a, obligatorio, orden)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [codigo, d.nombre, d.descripcion, d.aplicaA, d.obligatorio, p],
+      `INSERT INTO documentos_requeridos (codigo, nombre, descripcion, aplica_a, obligatorio)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [codigo, d.nombre, d.descripcion, d.aplicaA, d.obligatorio],
     );
     return (r.rows[0] as { id: number }).id;
   },
 
-  /** Con `orden` mueve el documento a esa posición (los demás se corren); sin `orden` conserva la suya. */
   async actualizar(db: Queryable, id: number, d: DatosDocumento): Promise<void> {
-    await bloquearOrden(db, 'documentos_requeridos');
     await db.query(
       `UPDATE documentos_requeridos
           SET nombre = $2, descripcion = $3, aplica_a = $4, obligatorio = $5 WHERE id = $1`,
       [id, d.nombre, d.descripcion, d.aplicaA, d.obligatorio],
     );
-    if (d.orden !== undefined) {
-      await renumerar(db, 'documentos_requeridos', 'TRUE', [], { id, posicion: d.orden });
-    }
-  },
-
-  /** Lleva el documento a esa posición de la lista; los demás se corren. */
-  async mover(db: Queryable, id: number, posicion: number): Promise<void> {
-    await bloquearOrden(db, 'documentos_requeridos');
-    await renumerar(db, 'documentos_requeridos', 'TRUE', [], { id, posicion });
   },
 
   async fijarActivo(db: Queryable, id: number, activo: boolean): Promise<void> {

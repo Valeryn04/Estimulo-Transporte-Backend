@@ -1,5 +1,6 @@
 import type { EstadoSolicitud } from '../../domain/estados.js';
 import type { Queryable } from '../db/pool.js';
+import { ORDEN_OPCIONES } from './catalogos.js';
 
 export interface VigenciaAbierta {
   id: number;
@@ -74,7 +75,8 @@ export const solicitudesRepo = {
       padre_id: number | null;
     }>(
       `SELECT id, codigo, nombre, padre_id FROM catalogo_items
-        WHERE catalogo = $1 AND activo ORDER BY orden, nombre`,
+        WHERE catalogo = $1 AND activo
+         ORDER BY ${ORDEN_OPCIONES()}`,
       [catalogo],
     );
     return r.rows.map((x) => ({

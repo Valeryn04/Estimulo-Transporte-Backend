@@ -8,7 +8,6 @@ export interface DocumentoExigido {
   descripcion: string;
   aplicaA: 'PCD' | 'CUIDADOR' | 'COMUN';
   obligatorio: boolean;
-  orden: number;
 }
 
 export interface ArchivoCargado {
@@ -73,12 +72,11 @@ export const documentosSolicitudRepo = {
       descripcion: string;
       aplica_a: DocumentoExigido['aplicaA'];
       obligatorio: boolean;
-      orden: number;
     }>(
-      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, orden
+      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio
          FROM documentos_requeridos
         WHERE activo AND (aplica_a <> 'CUIDADOR' OR $1::boolean)
-        ORDER BY orden, id`,
+        ORDER BY id`,
       [requiereCuidador],
     );
     return r.rows.map((f) => ({
@@ -88,7 +86,6 @@ export const documentosSolicitudRepo = {
       descripcion: f.descripcion,
       aplicaA: f.aplica_a,
       obligatorio: f.obligatorio,
-      orden: f.orden,
     }));
   },
 
@@ -103,10 +100,9 @@ export const documentosSolicitudRepo = {
       descripcion: string;
       aplica_a: DocumentoExigido['aplicaA'];
       obligatorio: boolean;
-      orden: number;
       activo: boolean;
     }>(
-      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, orden, activo
+      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, activo
          FROM documentos_requeridos WHERE id = $1`,
       [id],
     );
@@ -119,7 +115,6 @@ export const documentosSolicitudRepo = {
           descripcion: f.descripcion,
           aplicaA: f.aplica_a,
           obligatorio: f.obligatorio,
-          orden: f.orden,
           activo: f.activo,
         }
       : null;

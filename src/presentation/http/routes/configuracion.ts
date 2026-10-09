@@ -14,14 +14,6 @@ const nombre = (campo: string, min = 2, max = 150) =>
     .min(min, `${campo}: escriba al menos ${min} caracteres`)
     .max(max, `${campo}: máximo ${max} caracteres`);
 
-/** Posición en la lista: cada elemento tiene la suya (si se pide una ocupada, los demás se corren). */
-const posicion = z
-  .number({ error: 'Orden: escriba un número' })
-  .int('Orden: escriba un número entero')
-  .min(1, 'Orden: desde 1')
-  .max(100000, 'Orden: máximo 100000');
-const orden = posicion.optional();
-
 const itemSchema = z.object({
   nombre: nombre('Nombre'),
   codigo: z
@@ -31,24 +23,19 @@ const itemSchema = z.object({
     .regex(/^[A-Z0-9_]{1,40}$/, 'Código: use solo letras, números y guion bajo')
     .optional(),
   padreId: z.number().int().positive().nullable().optional(),
-  orden,
 });
-
-const moverSchema = z.object({ orden: posicion });
 
 const documentoSchema = z.object({
   nombre: nombre('Nombre', 3),
   descripcion: z.string().trim().max(500, 'Descripción: máximo 500 caracteres').default(''),
   aplicaA: z.enum(['PCD', 'CUIDADOR', 'COMUN'], { error: 'Aplica a: elija una opción' }),
   obligatorio: z.boolean({ error: 'Obligatorio: indique si es obligatorio' }),
-  orden,
 });
 
 const filtroItemsSchema = paginacionSchema.extend({
   q: z.string().trim().max(100).optional(),
   activo: z.enum(['true', 'false']).optional(),
   padreId: z.coerce.number().int().positive().optional(),
-  orden: z.coerce.number().int().min(1).optional(),
 });
 
 const versionParametroSchema = z.object({
@@ -131,7 +118,6 @@ export function rutasConfiguracion(s: Servicios): Router {
       q: f.q || undefined,
       activo: f.activo === undefined ? undefined : f.activo === 'true',
       padreId: f.padreId,
-      orden: f.orden,
       limit: f.tamano,
       offset: (f.pagina - 1) * f.tamano,
     });
@@ -150,12 +136,6 @@ export function rutasConfiguracion(s: Servicios): Router {
   r.put('/catalogos/items/:id', catalogos, async (req, res) => {
     const d = itemSchema.parse(req.body);
     res.json(await s.catalogos.actualizar(req.actor!, idParam(req), d, contexto(req)));
-  });
-
-  /** Reordena: lleva el elemento a la posición indicada (arrastrar y soltar). */
-  r.post('/catalogos/items/:id/mover', catalogos, async (req, res) => {
-    const d = moverSchema.parse(req.body);
-    res.json(await s.catalogos.mover(req.actor!, idParam(req), d.orden, contexto(req)));
   });
 
   r.post('/catalogos/items/:id/activar', catalogos, async (req, res) => {
@@ -183,11 +163,6 @@ export function rutasConfiguracion(s: Servicios): Router {
   r.put('/documentos-requeridos/:id', catalogos, async (req, res) => {
     const d = documentoSchema.parse(req.body);
     res.json(await s.catalogos.actualizarDocumento(req.actor!, idParam(req), d, contexto(req)));
-  });
-
-  r.post('/documentos-requeridos/:id/mover', catalogos, async (req, res) => {
-    const d = moverSchema.parse(req.body);
-    res.json(await s.catalogos.moverDocumento(req.actor!, idParam(req), d.orden, contexto(req)));
   });
 
   r.post('/documentos-requeridos/:id/activar', catalogos, async (req, res) => {
