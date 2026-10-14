@@ -185,6 +185,12 @@ describe('roles y permisos (RF-ADM-01)', () => {
       }
     });
 
+    it('un usuario con un rol propio no entra a los parámetros aunque conozca la ruta', async () => {
+      const rol = (await crear({ permisos: ['catalogos.administrar'] })).body as Rol;
+      const u = await usuarioConRol(rol.id);
+      expect((await request(e.app).get(`${api}/parametros`).set(auth(u))).status).toBe(403);
+    });
+
     it('al cambiar los permisos del rol, el cambio rige de inmediato para quien lo tiene (mismo token)', async () => {
       const rol = (await crear({ permisos: ['catalogos.administrar'] })).body as Rol;
       const u = await usuarioConRol(rol.id);
@@ -227,6 +233,50 @@ describe('roles y permisos (RF-ADM-01)', () => {
     });
   });
 
+  describe('permisos exclusivos del administrador', () => {
+    it('administrar los parámetros no se puede dar a ningún otro rol, ni al crear ni al modificar', async () => {
+      const crearConParametros = await crear({
+        nombre: 'Rol con parámetros',
+        permisos: ['parametros.administrar'],
+      });
+      expect(crearConParametros.status).toBe(422);
+      expect(crearConParametros.body.error.errores[0].mensaje).toContain(
+        'solo lo tiene el administrador',
+      );
+      const rol = (await crear({ nombre: 'Rol sin parámetros' })).body as Rol;
+      const r = await request(e.app)
+        .put(`${api}/roles/${rol.id}`)
+        .set(auth(admin))
+        .send({
+          nombre: 'Rol sin parámetros',
+          descripcion: 'Intenta quedarse con los parámetros',
+          permisos: ['catalogos.administrar', 'parametros.administrar'],
+        });
+      expect(r.status).toBe(422);
+      const analista = await porCodigo('ANALISTA');
+      const sistema = await request(e.app)
+        .put(`${api}/roles/${analista.id}`)
+        .set(auth(admin))
+        .send({
+          nombre: analista.nombre,
+          descripcion: analista.descripcion,
+          permisos: ['parametros.administrar'],
+        });
+      expect(sistema.status).toBe(422);
+    });
+
+    it('la lista de permisos marca los exclusivos del administrador (la pantalla los deshabilita)', async () => {
+      const permisos = (await request(e.app).get(`${api}/permisos`).set(auth(admin))).body
+        .items as { codigo: string; soloAdministrador: boolean }[];
+      expect(permisos.find((p) => p.codigo === 'parametros.administrar')?.soloAdministrador).toBe(
+        true,
+      );
+      expect(permisos.find((p) => p.codigo === 'catalogos.administrar')?.soloAdministrador).toBe(
+        false,
+      );
+    });
+  });
+
   describe('modificar un rol', () => {
     it('un rol propio se renombra y cambia de descripción y permisos, con valor anterior y nuevo en la bitácora', async () => {
       const rol = (await crear({ nombre: 'Rol por renombrar' })).body as Rol;
@@ -236,13 +286,13 @@ describe('roles y permisos (RF-ADM-01)', () => {
         .send({
           nombre: 'Rol ya renombrado',
           descripcion: 'Descripción nueva del rol',
-          permisos: ['parametros.administrar'],
+          permisos: ['catalogos.administrar'],
         });
       expect(r.status).toBe(200);
       expect(r.body).toMatchObject({
         nombre: 'Rol ya renombrado',
         descripcion: 'Descripción nueva del rol',
-        permisos: ['parametros.administrar'],
+        permisos: ['catalogos.administrar'],
         codigo: rol.codigo,
       });
       const b = await e.pool.query(

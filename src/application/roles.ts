@@ -1,3 +1,4 @@
+import { PERMISOS_SOLO_ADMINISTRADOR } from '../domain/limites.js';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import { codigoDesdeNombre } from '../domain/texto.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
@@ -48,6 +49,15 @@ export class ServicioRoles {
     if (permisos.some((p) => !conocidos.has(p))) {
       throw errorValidacion([
         { campo: 'permisos', mensaje: 'Permisos: hay un permiso que no existe' },
+      ]);
+    }
+    if (permisos.some((p) => PERMISOS_SOLO_ADMINISTRADOR.includes(p))) {
+      throw errorValidacion([
+        {
+          campo: 'permisos',
+          mensaje:
+            'Permisos: administrar los parámetros solo lo tiene el administrador y no se asigna a otros roles',
+        },
       ]);
     }
   }

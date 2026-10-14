@@ -1,3 +1,4 @@
+import { PERMISOS_SOLO_ADMINISTRADOR } from '../../domain/limites.js';
 import type { Queryable } from '../db/pool.js';
 
 export interface RolFila {
@@ -16,6 +17,8 @@ export interface PermisoFila {
   codigo: string;
   modulo: string;
   descripcion: string;
+  /** Solo lo tiene el administrador: no se puede asignar a otros roles. */
+  soloAdministrador: boolean;
 }
 
 export interface DatosRol {
@@ -49,10 +52,13 @@ export const rolesRepo = {
   },
 
   async permisos(db: Queryable): Promise<PermisoFila[]> {
-    const r = await db.query<PermisoFila>(
+    const r = await db.query<Omit<PermisoFila, 'soloAdministrador'>>(
       `SELECT codigo, modulo, descripcion FROM permisos ORDER BY modulo, codigo`,
     );
-    return r.rows;
+    return r.rows.map((f) => ({
+      ...f,
+      soloAdministrador: PERMISOS_SOLO_ADMINISTRADOR.includes(f.codigo),
+    }));
   },
 
   async crear(db: Queryable, codigo: string, d: DatosRol): Promise<number> {

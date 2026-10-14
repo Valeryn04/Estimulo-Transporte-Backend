@@ -1,3 +1,4 @@
+import { ARCHIVO_MAX_MB_ABSOLUTO } from '../domain/limites.js';
 import { createHash } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import {
@@ -68,7 +69,9 @@ export class ServicioDocumentos {
           .filter((f): f is FormatoDocumento => FORMATOS_CONOCIDOS.includes(f as FormatoDocumento)),
       ),
     ];
-    return { formatos, maxMb, maxBytes: maxMb * 1_048_576 };
+    // Aunque el parámetro llegara a decir otra cosa, nunca se acepta más del tope absoluto.
+    const tope = Math.min(maxMb, ARCHIVO_MAX_MB_ABSOLUTO);
+    return { formatos, maxMb: tope, maxBytes: tope * 1_048_576 };
   }
 
   private async requiereCuidador(solicitudId: number): Promise<boolean> {

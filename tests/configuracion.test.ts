@@ -265,35 +265,86 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
   });
 
   describe('parámetros versionados (RNF-12)', () => {
-    it('lista los parámetros del documento con su valor vigente', async () => {
+    it('lista solo los parámetros que el software ya usa, con su valor vigente y su rango permitido', async () => {
       const lista = (await get('/parametros')).body.items as {
         clave: string;
+        minimo: number | null;
+        maximo: number | null;
         vigente: { valor: string };
       }[];
-      const valor = (k: string) => lista.find((p) => p.clave === k)?.vigente.valor;
-      expect(valor('archivo_max_mb')).toBe('5');
-      expect(valor('archivo_formatos')).toBe('pdf,jpg,png');
-      expect(valor('meta_beneficiarios')).toBe('3000');
-      expect(valor('plazo_subsanacion_dias')).toBe('10');
-      expect(valor('max_rondas_subsanacion')).toBe('2');
-      expect(valor('plazo_descargos_dias')).toBe('10');
+      const por = (k: string) => lista.find((p) => p.clave === k);
+      expect(lista.map((p) => p.clave).sort()).toEqual([
+        'archivo_formatos',
+        'archivo_max_mb',
+        'enlace_seguro_dias',
+        'login_bloqueo_minutos',
+        'login_max_intentos',
+        'otp_vigencia_minutos',
+        'reenvio_verificacion_minutos',
+        'sesion_inactividad_minutos',
+        'sesion_maxima_horas',
+        'verificacion_correo_horas',
+      ]);
+      expect(por('archivo_max_mb')?.vigente.valor).toBe('5');
+      expect(por('archivo_formatos')?.vigente.valor).toBe('pdf,jpg,png');
+      // El tamaño por documento nunca pasa de 10 MB y los de seguridad tienen rangos cortos.
+      expect(por('archivo_max_mb')).toMatchObject({ minimo: 1, maximo: 10 });
+      expect(por('otp_vigencia_minutos')).toMatchObject({ minimo: 5, maximo: 15 });
+      expect(por('sesion_maxima_horas')).toMatchObject({ minimo: 1, maximo: 12 });
+      // Los parámetros de funciones que aún no existen no se muestran ni se pueden cambiar.
+      for (const clave of [
+        'plazo_subsanacion_dias',
+        'max_rondas_subsanacion',
+        'plazo_descargos_dias',
+        'meta_beneficiarios',
+      ]) {
+        expect(por(clave), clave).toBeUndefined();
+        const r = await post(`/parametros/${clave}/versiones`, {
+          valor: '5',
+          justificacion: 'no debería poder',
+        });
+        expect(r.status, clave).toBe(404);
+      }
+    });
+
+    it('el tamaño máximo por documento no puede pasar de 10 MB', async () => {
+      const campo = async (valor: string) => {
+        const r = await post('/parametros/archivo_max_mb/versiones', {
+          valor,
+          justificacion: 'prueba de límite',
+        });
+        return { status: r.status, mensaje: r.body.error?.errores?.[0]?.mensaje as string };
+      };
+      expect((await campo('25')).status).toBe(422);
+      expect((await campo('25')).mensaje).toContain('máximo permitido es 10');
+      expect((await campo('11')).status).toBe(422);
+      expect((await campo('10')).status).toBe(201);
+      // El servidor tampoco usa más de 10 MB aunque la base de datos tuviera un valor mayor.
+      await e.pool.query(`UPDATE parametros SET maximo = 100 WHERE clave = 'archivo_max_mb'`);
+      expect((await campo('50')).status).toBe(201);
+      const reglas = await e.servicios.documentos.reglas();
+      expect(reglas.maxMb).toBe(10);
+      expect(reglas.maxBytes).toBe(10 * 1_048_576);
+      await e.pool.query(`UPDATE parametros SET maximo = 10 WHERE clave = 'archivo_max_mb'`);
+      await post('/parametros/archivo_max_mb/versiones', { valor: '5', justificacion: 'volver' });
     });
 
     it('un cambio crea una versión con aprobador y motivo, rige de inmediato y conserva el historial', async () => {
-      const r = await post('/parametros/plazo_subsanacion_dias/versiones', {
-        valor: '15',
+      const r = await post('/parametros/verificacion_correo_horas/versiones', {
+        valor: '96',
         justificacion: 'Manual operativo v2',
       });
       expect(r.status).toBe(201);
-      expect(r.body.vigente.valor).toBe('15');
+      expect(r.body.vigente.valor).toBe('96');
       expect(r.body.vigente.aprobadoPor).toBe(admin.usuario);
       expect(r.body.pendienteDefinicion).toBe(false);
-      const h = await get('/parametros/plazo_subsanacion_dias/historial');
-      expect(h.body.items.map((x: { valor: string }) => x.valor)).toEqual(['15', '10']);
+      const h = await get('/parametros/verificacion_correo_horas/historial');
+      expect(h.body.items.map((x: { valor: string }) => x.valor)).toEqual(['96', '72']);
       const b = await e.pool.query(
-        `SELECT valor_anterior, valor_nuevo, justificacion FROM bitacora WHERE accion = 'PARAMETRO_VERSION_CREADA'`,
+        `SELECT valor_anterior, valor_nuevo, justificacion FROM bitacora
+          WHERE accion = 'PARAMETRO_VERSION_CREADA' AND entidad_id = 'verificacion_correo_horas'`,
       );
-      expect(b.rows[0].valor_anterior.valor).toBe('10');
+      expect(b.rows[0].valor_anterior.valor).toBe('72');
       expect(b.rows[0].justificacion).toBe('Manual operativo v2');
     });
 
@@ -321,13 +372,13 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
 
     it('programa un valor para una fecha futura: no rige hasta entonces', async () => {
       const futuro = new Date(Date.now() + 7 * 86_400_000).toISOString();
-      const r = await post('/parametros/max_rondas_subsanacion/versiones', {
-        valor: '3',
+      const r = await post('/parametros/enlace_seguro_dias/versiones', {
+        valor: '120',
         vigenteDesde: futuro,
         justificacion: 'Nueva convocatoria',
       });
-      expect(r.body.vigente.valor).toBe('2');
-      expect(r.body.programada.valor).toBe('3');
+      expect(r.body.vigente.valor).toBe('90');
+      expect(r.body.programada.valor).toBe('120');
     });
 
     it('valida tipo, rango y formato', async () => {

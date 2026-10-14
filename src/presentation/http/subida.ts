@@ -1,10 +1,11 @@
 import type { Request, Response } from 'express';
 import multer from 'multer';
+import { ARCHIVO_MAX_MB_ABSOLUTO } from '../../domain/limites.js';
 import { errorValidacion } from '../../application/esquemas.js';
 import type { ArchivoEntrada } from '../../application/documentos.js';
 
-/** Tope absoluto de lo que se acepta recibir (el tamaño permitido por documento es un parámetro y se valida después). */
-const TOPE_BYTES = 26 * 1_048_576;
+/** Tope absoluto de lo que se acepta recibir: el máximo permitido más 1 MB de margen. El tamaño exacto por documento es un parámetro y se valida después. */
+const TOPE_BYTES = (ARCHIVO_MAX_MB_ABSOLUTO + 1) * 1_048_576;
 
 /** Recibe un solo archivo, en memoria, en el campo «archivo». */
 export const recibirArchivo = multer({

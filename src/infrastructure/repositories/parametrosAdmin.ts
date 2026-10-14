@@ -64,7 +64,7 @@ export const parametrosAdminRepo = {
   async listar(db: Queryable): Promise<Parametro[]> {
     const params = await db.query<FilaParametro>(
       `SELECT clave, grupo, descripcion, tipo, minimo, maximo, patron, pendiente_definicion
-         FROM parametros ORDER BY grupo, clave`,
+         FROM parametros WHERE en_uso ORDER BY grupo, clave`,
     );
     // «Rige» se calcula con el reloj de la base de datos, el mismo que fija `vigente_desde` al crear la versión.
     const versiones = await db.query<FilaVersion & { rige: boolean }>(
@@ -103,7 +103,7 @@ export const parametrosAdminRepo = {
   > | null> {
     const r = await db.query<FilaParametro>(
       `SELECT clave, grupo, descripcion, tipo, minimo, maximo, patron, pendiente_definicion
-         FROM parametros WHERE clave = $1`,
+         FROM parametros WHERE clave = $1 AND en_uso`,
       [clave],
     );
     const f = r.rows[0];
