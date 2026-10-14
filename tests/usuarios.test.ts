@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { validarPassword } from '../src/domain/passwords.js';
+import { ErrorEnvioCorreo } from '../src/infrastructure/mail/mailer.js';
 import {
   auth,
   crearCuenta,
@@ -32,10 +34,17 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     usuario: `func${Math.random().toString(36).slice(2, 8)}`,
     nombres: 'María Pérez Gómez',
     correo: `m${Math.random().toString(36).slice(2, 8)}@barranquilla.gov.co`,
-    password: 'Temporal#2026ab',
     rolId: rolIds.AUDITOR_VERIFICADOR,
     ...extra,
   });
+
+  /** La contraseña temporal solo existe en el correo que recibe la persona: se lee del último correo enviado. */
+  const contrasenaDelCorreo = async () => {
+    await e.servicios.correos.esperarDespachos();
+    const m = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text);
+    expect(m, 'el correo debe traer la contraseña temporal').not.toBeNull();
+    return (m as RegExpExecArray)[1] as string;
+  };
 
   it('lista los 7 roles del numeral 3.2 con sus permisos', async () => {
     expect(Object.keys(rolIds).sort()).toEqual(
@@ -71,21 +80,104 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     expect(b.rows[0].valor_nuevo.rol.codigo).toBe('ANALISTA');
   });
 
+  it('la contraseña temporal la genera el sistema, llega por correo y no queda en claro en la base', async () => {
+    const d = nuevo({ rolId: rolIds.ANALISTA });
+    const r = await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(d);
+    expect(r.status).toBe(201);
+    const temporal = await contrasenaDelCorreo();
+    const correo = e.mailer.ultimo();
+    expect(correo.to).toBe(d.correo);
+    expect(correo.text).toContain(`Usuario: ${d.usuario}`);
+    expect(correo.text).toContain('/interno/login');
+    // Cumple la política de contraseñas y no se parece al usuario.
+    expect(validarPassword(temporal, d.usuario)).toEqual([]);
+    // Nada en la respuesta de la API ni en la base de datos (texto del correo, bitácora, secretos) la contiene.
+    expect(JSON.stringify(r.body)).not.toContain(temporal);
+    const guardado = await e.pool.query(
+      `SELECT cuerpo, secretos FROM correos WHERE destinatario = $1 AND tipo = 'CUENTA_CREADA'`,
+      [d.correo],
+    );
+    expect(guardado.rows).toHaveLength(1);
+    expect(guardado.rows[0].cuerpo).not.toContain(temporal);
+    expect(guardado.rows[0].cuerpo).toContain('[contraseña temporal]');
+    expect(guardado.rows[0].secretos).toBeNull(); // se borra al salir el correo
+    const bitacora = await e.pool.query(`SELECT valor_nuevo FROM bitacora WHERE entidad_id = $1`, [
+      String(r.body.id),
+    ]);
+    expect(JSON.stringify(bitacora.rows)).not.toContain(temporal);
+    // Con esa contraseña entra, y el sistema le obliga a cambiarla.
+    const login = await request(e.app)
+      .post(`${api}/auth/login`)
+      .send({ usuario: d.usuario, password: temporal });
+    expect(login.status).toBe(200);
+    expect(login.body.perfil.debeCambiarPassword).toBe(true);
+  });
+
+  it('cada contraseña temporal es distinta y la API ignora una que escriba el administrador', async () => {
+    const a = nuevo();
+    const b = nuevo();
+    await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(a);
+    const pa = await contrasenaDelCorreo();
+    await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(b);
+    const pb = await contrasenaDelCorreo();
+    expect(pa).not.toBe(pb);
+    const c = nuevo();
+    await request(e.app)
+      .post(`${api}/admin/usuarios`)
+      .set(auth(admin))
+      .send({ ...c, password: 'Escrita#Por1Admin' });
+    const pc = await contrasenaDelCorreo();
+    expect(pc).not.toBe('Escrita#Por1Admin');
+    const intento = await request(e.app)
+      .post(`${api}/auth/login`)
+      .send({ usuario: c.usuario, password: 'Escrita#Por1Admin' });
+    expect(intento.status).toBe(401);
+  });
+
+  it('si el correo no sale a la primera, la contraseña sigue cifrada y sale en el reintento', async () => {
+    e.mailer.falla = new ErrorEnvioCorreo('servidor caído', false);
+    const d = nuevo();
+    const r = await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(d);
+    expect(r.status).toBe(201);
+    await e.servicios.correos.esperarDespachos();
+    const pendiente = await e.pool.query(
+      `SELECT cuerpo, secretos, estado FROM correos WHERE destinatario = $1`,
+      [d.correo],
+    );
+    expect(pendiente.rows[0].estado).toBe('PENDIENTE');
+    expect(pendiente.rows[0].secretos).not.toBeNull();
+    expect(pendiente.rows[0].cuerpo).toContain('[contraseña temporal]');
+    // Vuelve el servicio de correo: el reintento envía la contraseña real y limpia el secreto.
+    e.mailer.falla = null;
+    await e.pool.query(`UPDATE correos SET proximo_intento_at = now() WHERE destinatario = $1`, [
+      d.correo,
+    ]);
+    await e.servicios.correos.procesarPendientes();
+    const temporal = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text)?.[1] as string;
+    expect(temporal).toBeTruthy();
+    expect(temporal).not.toContain('[');
+    const fin = await e.pool.query(`SELECT secretos, estado FROM correos WHERE destinatario = $1`, [
+      d.correo,
+    ]);
+    expect(fin.rows[0]).toMatchObject({ estado: 'ENVIADO', secretos: null });
+  });
+
   it('la contraseña se guarda como hash adaptativo, nunca en texto plano', async () => {
     const d = nuevo();
     const r = await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(d);
+    const temporal = await contrasenaDelCorreo();
     const { rows } = await e.pool.query(`SELECT password_hash FROM usuarios WHERE id = $1`, [
       r.body.id,
     ]);
     expect(rows[0].password_hash).toMatch(/^\$argon2id\$/);
-    expect(rows[0].password_hash).not.toContain(d.password);
+    expect(rows[0].password_hash).not.toContain(temporal);
   });
 
   it('valida los datos con mensajes por campo (usuario, correo, contraseña, rol)', async () => {
     const r = await request(e.app)
       .post(`${api}/admin/usuarios`)
       .set(auth(admin))
-      .send({ usuario: 'A', nombres: 'x', correo: 'mal', password: 'corta' });
+      .send({ usuario: 'A', nombres: 'x', correo: 'mal' });
     expect(r.status).toBe(422);
     const campos = (r.body.error.errores as { campo: string }[]).map((x) => x.campo);
     expect(campos).toEqual(expect.arrayContaining(['usuario', 'nombres', 'correo']));
@@ -144,11 +236,12 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
       .set(auth(admin))
       .send(nuevo());
     const id = creado.body.id as number;
+    const temporal = await contrasenaDelCorreo();
     const u = await e.pool.query(`SELECT usuario FROM usuarios WHERE id = $1`, [id]);
     await e.pool.query(`UPDATE usuarios SET debe_cambiar_password = false WHERE id = $1`, [id]);
     const login = await request(e.app)
       .post(`${api}/auth/login`)
-      .send({ usuario: u.rows[0].usuario, password: 'Temporal#2026ab' });
+      .send({ usuario: u.rows[0].usuario, password: temporal });
     expect((await request(e.app).get(`${api}/admin/usuarios`).set(auth(login.body))).status).toBe(
       403,
     );
@@ -278,22 +371,29 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     expect(quitar.body.error.codigo).toBe('USUARIO_PROTEGIDO');
   });
 
-  it('restablecer contraseña fija una temporal, cierra sesiones y obliga a cambiarla', async () => {
+  it('restablecer contraseña genera una temporal nueva, la envía por correo, cierra sesiones y obliga a cambiarla', async () => {
     const c = await crearCuenta(e, 'ANALISTA');
-    const floja = await request(e.app)
-      .post(`${api}/admin/usuarios/${c.id}/restablecer-password`)
-      .set(auth(admin))
-      .send({ password: 'floja' });
-    expect(floja.status).toBe(422);
     const ok = await request(e.app)
       .post(`${api}/admin/usuarios/${c.id}/restablecer-password`)
-      .set(auth(admin))
-      .send({ password: 'Otra#Temporal2026' });
+      .set(auth(admin));
     expect(ok.status).toBe(204);
+    expect(ok.text).toBe('');
+    const temporal = await contrasenaDelCorreo();
+    expect(e.mailer.ultimo().subject).toContain('restablecida');
+    const guardado = await e.pool.query(
+      `SELECT cuerpo, secretos FROM correos WHERE tipo = 'PASSWORD_RESTABLECIDA' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(guardado.rows[0].cuerpo).not.toContain(temporal);
+    expect(guardado.rows[0].secretos).toBeNull();
     expect((await request(e.app).get(`${api}/auth/me`).set(auth(c))).status).toBe(401);
+    // La anterior ya no sirve; la nueva sí y pide cambiarla.
+    const vieja = await request(e.app)
+      .post(`${api}/auth/login`)
+      .send({ usuario: c.usuario, password: c.password });
+    expect(vieja.status).toBe(401);
     const login = await request(e.app)
       .post(`${api}/auth/login`)
-      .send({ usuario: c.usuario, password: 'Otra#Temporal2026' });
+      .send({ usuario: c.usuario, password: temporal });
     expect(login.body.perfil.debeCambiarPassword).toBe(true);
   });
 

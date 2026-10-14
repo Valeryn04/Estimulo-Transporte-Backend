@@ -1,13 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  auth,
-  crearCuenta,
-  crearEntorno,
-  PASSWORD_PRUEBA,
-  type CuentaPrueba,
-  type Entorno,
-} from './helpers.js';
+import { auth, crearCuenta, crearEntorno, type CuentaPrueba, type Entorno } from './helpers.js';
 
 const api = '/api/v1/admin';
 
@@ -167,16 +160,18 @@ describe('roles y permisos (RF-ADM-01)', () => {
           usuario: `rol${++contador}${Math.random().toString(36).slice(2, 6)}`,
           nombres: 'Persona de Prueba',
           correo: `p${contador}${Math.random().toString(36).slice(2, 6)}@barranquilla.gov.co`,
-          password: PASSWORD_PRUEBA,
           rolId,
         });
       expect(r.status).toBe(201);
+      // La contraseña temporal solo llega por correo.
+      await e.servicios.correos.esperarDespachos();
+      const temporal = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text)?.[1] as string;
       await e.pool.query(`UPDATE usuarios SET debe_cambiar_password = false WHERE id = $1`, [
         r.body.id,
       ]);
       const login = await request(e.app)
         .post('/api/v1/auth/login')
-        .send({ usuario: r.body.usuario, password: PASSWORD_PRUEBA });
+        .send({ usuario: r.body.usuario, password: temporal });
       expect(login.status).toBe(200);
       return { id: r.body.id as number, token: login.body.token as string };
     }
@@ -330,7 +325,6 @@ describe('roles y permisos (RF-ADM-01)', () => {
           usuario: `enuso${++contador}`,
           nombres: 'Persona En Uso',
           correo: `enuso${contador}@barranquilla.gov.co`,
-          password: PASSWORD_PRUEBA,
           rolId: rol.id,
         })
         .expect(201);

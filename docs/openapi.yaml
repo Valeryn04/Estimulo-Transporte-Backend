@@ -659,7 +659,7 @@ paths:
     post:
       tags: [Administración de usuarios]
       summary: Crear un usuario interno
-      description: La contraseña inicial es temporal; la persona debe cambiarla al ingresar.
+      description: El sistema genera la contraseña temporal y se la envía por correo a la persona; debe cambiarla al ingresar.
       security: [{ bearerInterno: [] }]
       requestBody:
         required: true
@@ -789,20 +789,11 @@ paths:
       - { name: id, in: path, required: true, schema: { type: integer } }
     post:
       tags: [Administración de usuarios]
-      summary: Fijar una contraseña temporal
-      description: Cierra las sesiones del usuario y lo obliga a cambiarla al ingresar.
+      summary: Restablecer la contraseña (la genera el sistema y la envía por correo)
+      description: El sistema genera una contraseña temporal, se la envía por correo al usuario (el administrador no la ve), cierra sus sesiones y lo obliga a cambiarla al ingresar.
       security: [{ bearerInterno: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [password]
-              properties:
-                password: { type: string }
       responses:
-        '204': { description: Contraseña temporal fijada }
+        '204': { description: Contraseña restablecida y enviada por correo }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
@@ -1561,13 +1552,12 @@ components:
             - $ref: '#/components/schemas/RolAsignado'
     UsuarioNuevo:
       type: object
-      required: [usuario, nombres, correo, password, rolId]
+      required: [usuario, nombres, correo, rolId]
       properties:
         usuario:
           { type: string, description: '3 a 40 caracteres: minúsculas, números, punto, guion' }
         nombres: { type: string }
         correo: { type: string, format: email }
-        password: { type: string, description: Contraseña temporal que cumple la política }
         rolId: { type: integer, description: El rol del usuario (uno solo) }
     UsuarioEdicion:
       type: object

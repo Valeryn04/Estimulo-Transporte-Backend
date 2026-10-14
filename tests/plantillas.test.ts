@@ -88,6 +88,8 @@ describe('plantillas de correo configurables (RF-COM-02, RNF-12)', () => {
       expect(lista.map((p) => p.codigo).sort()).toEqual([
         'CARACTERIZACION_RADICADA',
         'CODIGO_CONSULTA',
+        'CUENTA_CREADA',
+        'PASSWORD_RESTABLECIDA',
         'PREINSCRIPCION_EXITOSA',
         'PREINSCRIPCION_VERIFICACION',
       ]);

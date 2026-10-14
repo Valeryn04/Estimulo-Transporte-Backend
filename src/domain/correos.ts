@@ -8,7 +8,9 @@ export type TipoCorreo =
   | 'PREINSCRIPCION_VERIFICACION'
   | 'PREINSCRIPCION_EXITOSA'
   | 'CARACTERIZACION_RADICADA'
-  | 'CODIGO_CONSULTA';
+  | 'CODIGO_CONSULTA'
+  | 'CUENTA_CREADA'
+  | 'PASSWORD_RESTABLECIDA';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {
@@ -27,7 +29,18 @@ export interface DatosCorreo {
   minutosVigencia?: number;
   fechaLimite?: string;
   itemsSubsanar?: string;
+  /** Usuario de ingreso al portal interno. */
+  usuario?: string;
+  enlaceAcceso?: string;
+  /**
+   * Contraseña temporal del funcionario. NUNCA se escribe en el texto guardado del correo: allí queda un marcador y
+   * la contraseña viaja cifrada aparte hasta que el correo sale.
+   */
+  contrasenaTemporal?: string;
 }
+
+/** Lo que reemplaza a la contraseña temporal en el texto que se conserva del correo. */
+export const MARCADOR_CONTRASENA = '[contraseña temporal]';
 
 /** Variables disponibles para las plantillas, con su descripción y un ejemplo para la vista previa. */
 export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }> = {
@@ -62,6 +75,16 @@ export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }>
   horas_vigencia: { descripcion: 'Horas de vigencia del enlace de verificación', ejemplo: '72' },
   codigo: { descripcion: 'Código de un solo uso para consultar el estado', ejemplo: '482915' },
   minutos_vigencia: { descripcion: 'Minutos de vigencia del código', ejemplo: '10' },
+  nombre_funcionario: { descripcion: 'Nombre del funcionario', ejemplo: 'Carlos Gómez' },
+  usuario: { descripcion: 'Usuario para ingresar al portal interno', ejemplo: 'cgomez' },
+  contrasena_temporal: {
+    descripcion: 'Contraseña temporal generada por el sistema (se cambia al primer ingreso)',
+    ejemplo: 'Kp7#mXw2Rq9a',
+  },
+  enlace_acceso: {
+    descripcion: 'Enlace para ingresar al portal interno',
+    ejemplo: 'https://estimulo.barranquilla.gov.co/interno/login',
+  },
   aviso_preinscripcion: {
     descripcion: 'Aclaración de que la preinscripción no equivale a la aprobación del beneficio',
     ejemplo: AVISO_PREINSCRIPCION,
@@ -90,6 +113,10 @@ export function valoresDeCorreo(d: DatosCorreo): Record<string, string> {
     minutos_vigencia: d.minutosVigencia,
     fecha_limite: d.fechaLimite,
     items_subsanar: d.itemsSubsanar,
+    nombre_funcionario: d.nombre,
+    usuario: d.usuario,
+    enlace_acceso: d.enlaceAcceso,
+    contrasena_temporal: d.contrasenaTemporal === undefined ? undefined : MARCADOR_CONTRASENA,
     aviso_preinscripcion: AVISO_PREINSCRIPCION,
   };
   return Object.fromEntries(

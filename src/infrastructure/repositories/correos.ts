@@ -14,6 +14,8 @@ export interface CorreoFila {
   estado: EstadoCorreo;
   intentos: number;
   messageId: string | null;
+  /** Datos que no se guardan en claro (cifrados) y que se usan al enviar. Se borran al terminar el envío. */
+  secretos: Buffer | null;
 }
 
 interface Fila {
@@ -27,6 +29,7 @@ interface Fila {
   estado: EstadoCorreo;
   intentos: number;
   message_id: string | null;
+  secretos: Buffer | null;
 }
 
 const mapear = (f: Fila): CorreoFila => ({
@@ -40,10 +43,11 @@ const mapear = (f: Fila): CorreoFila => ({
   estado: f.estado,
   intentos: f.intentos,
   messageId: f.message_id,
+  secretos: f.secretos,
 });
 
 const COLS = `id, solicitud_id, tipo, plantilla_version, destinatario, asunto, cuerpo, estado,
-              intentos, message_id`;
+              intentos, message_id, secretos`;
 
 export const correosRepo = {
   async encolar(
@@ -55,12 +59,21 @@ export const correosRepo = {
       destinatario: string;
       asunto: string;
       cuerpo: string;
+      secretos?: Buffer | null;
     },
   ): Promise<number> {
     const r = await db.query<{ id: number }>(
-      `INSERT INTO correos (solicitud_id, tipo, plantilla_version, destinatario, asunto, cuerpo)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [d.solicitudId, d.tipo, d.plantillaVersion, d.destinatario, d.asunto, d.cuerpo],
+      `INSERT INTO correos (solicitud_id, tipo, plantilla_version, destinatario, asunto, cuerpo, secretos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [
+        d.solicitudId,
+        d.tipo,
+        d.plantillaVersion,
+        d.destinatario,
+        d.asunto,
+        d.cuerpo,
+        d.secretos ?? null,
+      ],
     );
     return (r.rows[0] as { id: number }).id;
   },
@@ -88,7 +101,7 @@ export const correosRepo = {
   async marcarEnviado(db: Queryable, id: number, messageId: string): Promise<void> {
     await db.query(
       `UPDATE correos SET estado = 'ENVIADO', intentos = intentos + 1, message_id = $2, enviado_at = now(),
-                          ultimo_error = NULL
+                          ultimo_error = NULL, secretos = NULL
         WHERE id = $1`,
       [id, messageId],
     );
@@ -116,7 +129,7 @@ export const correosRepo = {
     error: string,
   ): Promise<void> {
     await db.query(
-      `UPDATE correos SET estado = $2, intentos = intentos + 1, ultimo_error = $3,
+      `UPDATE correos SET estado = $2, intentos = intentos + 1, ultimo_error = $3, secretos = NULL,
                           rebote_motivo = CASE WHEN $2 = 'REBOTADO' THEN $3 ELSE rebote_motivo END
         WHERE id = $1`,
       [id, estado, error.slice(0, 500)],

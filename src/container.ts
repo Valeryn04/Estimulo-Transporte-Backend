@@ -47,7 +47,7 @@ export function crearServicios(deps: Dependencias): Servicios {
   const documentos = new ServicioDocumentos(deps);
   return {
     autenticacion: new ServicioAutenticacion(deps),
-    usuarios: new ServicioUsuarios(deps),
+    usuarios: new ServicioUsuarios(deps, correos),
     roles: new ServicioRoles(deps),
     catalogos: new ServicioCatalogos(deps),
     parametros: new ServicioParametros(deps),

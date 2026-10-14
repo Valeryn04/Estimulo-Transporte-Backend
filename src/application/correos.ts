@@ -1,9 +1,11 @@
 import {
+  MARCADOR_CONTRASENA,
   renderizar,
   valoresDeCorreo,
   type DatosCorreo,
   type TipoCorreo,
 } from '../domain/correos.js';
+import { DataCipher } from '../infrastructure/security/crypto.js';
 import { plantillasRepo } from '../infrastructure/repositories/plantillas.js';
 import { type Queryable } from '../infrastructure/db/pool.js';
 import { correosRepo } from '../infrastructure/repositories/correos.js';
@@ -24,8 +26,11 @@ const LOTE = 20;
 export class ServicioCorreos {
   private activo: Promise<void> | null = null;
   private otraVuelta = false;
+  private readonly cipher: DataCipher;
 
-  constructor(private readonly deps: Dependencias) {}
+  constructor(private readonly deps: Dependencias) {
+    this.cipher = new DataCipher(deps.env.encryption);
+  }
 
   /**
    * Registra el correo en la bandeja de salida con la versión vigente de su plantilla. Guarda el texto final y la
@@ -43,6 +48,11 @@ export class ServicioCorreos {
     const plantilla = await plantillasRepo.vigente(db, d.tipo);
     if (!plantilla) throw new Error(`La plantilla ${d.tipo} no tiene versiones`);
     const valores = valoresDeCorreo(d.datos);
+    // La contraseña temporal no se guarda en el texto del correo: va cifrada aparte hasta que el correo sale.
+    const secretos =
+      d.datos.contrasenaTemporal === undefined
+        ? null
+        : this.cipher.cifrarJson({ contrasenaTemporal: d.datos.contrasenaTemporal });
     return correosRepo.encolar(db, {
       solicitudId: d.solicitudId,
       tipo: d.tipo,
@@ -50,6 +60,7 @@ export class ServicioCorreos {
       destinatario: d.destinatario,
       asunto: renderizar(plantilla.asunto, valores, true),
       cuerpo: renderizar(plantilla.cuerpo, valores),
+      secretos,
     });
   }
 
@@ -92,7 +103,11 @@ export class ServicioCorreos {
       if (lote.length === 0) return enviados;
       for (const c of lote) {
         try {
-          const r = await mailer.enviar({ to: c.destinatario, subject: c.asunto, text: c.cuerpo });
+          const r = await mailer.enviar({
+            to: c.destinatario,
+            subject: c.asunto,
+            text: this.textoParaEnviar(c.cuerpo, c.secretos),
+          });
           await correosRepo.marcarEnviado(pool, c.id, r.messageId);
           enviados += 1;
         } catch (error) {
@@ -112,6 +127,15 @@ export class ServicioCorreos {
         }
       }
     }
+  }
+
+  /** Pone la contraseña temporal (descifrada) en el lugar del marcador; solo existe en memoria al enviar. */
+  private textoParaEnviar(cuerpo: string, secretos: Buffer | null): string {
+    if (!secretos) return cuerpo;
+    const { contrasenaTemporal } = this.cipher.descifrarJson<{ contrasenaTemporal: string }>(
+      secretos,
+    );
+    return cuerpo.split(MARCADOR_CONTRASENA).join(contrasenaTemporal);
   }
 
   /** Reporte de entrega o rebote del proveedor de correo (RNF-13). */

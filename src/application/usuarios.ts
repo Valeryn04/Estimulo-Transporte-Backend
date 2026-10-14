@@ -1,5 +1,5 @@
 import { ACCION, MODULO } from '../domain/acciones.js';
-import { validarPassword } from '../domain/passwords.js';
+import { generarPasswordTemporal } from '../domain/passwords.js';
 import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { rolesRepo } from '../infrastructure/repositories/roles.js';
@@ -13,6 +13,7 @@ import {
 import { hashPassword } from '../infrastructure/security/passwords.js';
 import { badRequest, conflict, notFound } from '../shared/errors.js';
 import type { Actor, ContextoPeticion, Dependencias } from './contexto.js';
+import type { ServicioCorreos } from './correos.js';
 import { errorValidacion } from './esquemas.js';
 
 /** Código del rol que no puede perder el administrador principal. */
@@ -78,7 +79,15 @@ function traducirUnicidad(error: unknown): never {
 
 /** Administración de usuarios internos y del rol de cada uno (RF-ADM-01). */
 export class ServicioUsuarios {
-  constructor(private readonly deps: Dependencias) {}
+  constructor(
+    private readonly deps: Dependencias,
+    private readonly correos: ServicioCorreos,
+  ) {}
+
+  /** Enlace de ingreso al portal interno que lleva el correo con la contraseña temporal. */
+  private enlaceAcceso(): string {
+    return `${this.deps.env.frontendUrl}/interno/login`;
+  }
 
   async listar(filtro: FiltroUsuarios) {
     const { filas, total } = await usuariosRepo.listar(this.deps.pool, filtro);
@@ -115,16 +124,12 @@ export class ServicioUsuarios {
 
   async crear(
     actor: Actor,
-    d: DatosUsuario & { usuario: string; password: string },
+    d: DatosUsuario & { usuario: string },
     ctx: ContextoPeticion,
   ): Promise<UsuarioVista> {
-    const errores = validarPassword(d.password, d.usuario);
-    if (errores.length > 0) {
-      throw errorValidacion(
-        errores.map((e) => ({ campo: 'password', mensaje: `Contraseña inicial: ${e}` })),
-      );
-    }
-    const hash = await hashPassword(d.password);
+    // La contraseña temporal la genera el sistema y le llega a la persona por correo: el administrador no la ve.
+    const temporal = generarPasswordTemporal(d.usuario);
+    const hash = await hashPassword(temporal);
     const id = await withTransaction(this.deps.pool, async (tx) => {
       await usuariosRepo.bloquearAdministracion(tx);
       await this.validarRol(tx, d.rolId);
@@ -140,6 +145,17 @@ export class ServicioUsuarios {
         traducirUnicidad(error);
       }
       await usuariosRepo.asignarRol(tx, nuevo, d.rolId);
+      await this.correos.encolar(tx, {
+        solicitudId: null,
+        tipo: 'CUENTA_CREADA',
+        destinatario: d.correo,
+        datos: {
+          nombre: d.nombres,
+          usuario: d.usuario,
+          enlaceAcceso: this.enlaceAcceso(),
+          contrasenaTemporal: temporal,
+        },
+      });
       await bitacoraRepo.registrar(tx, {
         usuarioId: actor.id,
         modulo: MODULO.USUARIOS,
@@ -156,6 +172,7 @@ export class ServicioUsuarios {
       });
       return nuevo;
     });
+    this.correos.despachar();
     return this.obtener(id);
   }
 
@@ -261,27 +278,31 @@ export class ServicioUsuarios {
     return this.obtener(id);
   }
 
-  /** El administrador fija una contraseña temporal; la persona debe cambiarla al ingresar. */
-  async restablecerPassword(
-    actor: Actor,
-    id: number,
-    password: string,
-    ctx: ContextoPeticion,
-  ): Promise<void> {
+  /**
+   * El sistema genera una contraseña temporal nueva y se la envía por correo a la persona (el administrador no la
+   * ve ni la escribe); al ingresar debe cambiarla. Cierra sus sesiones abiertas.
+   */
+  async restablecerPassword(actor: Actor, id: number, ctx: ContextoPeticion): Promise<void> {
     const u = await usuariosRepo.porId(this.deps.pool, id);
     if (!u) throw notFound('Usuario no encontrado', 'USUARIO_NO_ENCONTRADO');
     if (u.estado === 'BAJA') {
       throw conflict('USUARIO_DE_BAJA', 'Un usuario dado de baja no puede modificarse');
     }
-    const errores = validarPassword(password, u.usuario);
-    if (errores.length > 0) {
-      throw errorValidacion(
-        errores.map((e) => ({ campo: 'password', mensaje: `Contraseña temporal: ${e}` })),
-      );
-    }
-    const hash = await hashPassword(password);
+    const temporal = generarPasswordTemporal(u.usuario);
+    const hash = await hashPassword(temporal);
     await withTransaction(this.deps.pool, async (tx) => {
       await usuariosRepo.fijarPassword(tx, id, hash, true);
+      await this.correos.encolar(tx, {
+        solicitudId: null,
+        tipo: 'PASSWORD_RESTABLECIDA',
+        destinatario: u.correo,
+        datos: {
+          nombre: u.nombres,
+          usuario: u.usuario,
+          enlaceAcceso: this.enlaceAcceso(),
+          contrasenaTemporal: temporal,
+        },
+      });
       await bitacoraRepo.registrar(tx, {
         usuarioId: actor.id,
         modulo: MODULO.USUARIOS,
@@ -291,5 +312,6 @@ export class ServicioUsuarios {
         ip: ctx.ip,
       });
     });
+    this.correos.despachar();
   }
 }

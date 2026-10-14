@@ -54,7 +54,6 @@ const crearSchema = z.object({
     ),
   nombres: nombresSchema,
   correo: correoSchema,
-  password: z.string({ error: 'Contraseña inicial: escríbala' }).max(128),
   rolId: rolIdSchema,
 });
 
@@ -70,10 +69,6 @@ const motivoSchema = z.object({
     .trim()
     .min(5, 'Motivo: explique la razón (mínimo 5 caracteres)')
     .max(500),
-});
-
-const passwordSchema = z.object({
-  password: z.string({ error: 'Contraseña temporal: escríbala' }).max(128),
 });
 
 const filtroSchema = paginacionSchema.extend({
@@ -168,8 +163,7 @@ export function rutasAdmin(s: Servicios): Router {
     '/usuarios/:id/restablecer-password',
     requierePermisos('usuarios.administrar'),
     async (req, res) => {
-      const { password } = passwordSchema.parse(req.body);
-      await s.usuarios.restablecerPassword(req.actor!, idParam(req), password, contexto(req));
+      await s.usuarios.restablecerPassword(req.actor!, idParam(req), contexto(req));
       res.status(204).end();
     },
   );
