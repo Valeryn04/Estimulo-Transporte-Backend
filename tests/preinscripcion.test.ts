@@ -57,7 +57,7 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       cuidadorNombre: 'Carlos Andrés López',
       cuidadorTipoIdentificacionId: cc,
       cuidadorNumero: String(consecutivo + 1),
-      direccion: 'Calle 45 # 20-10',
+      direccion: 'Calle 45 # 20 - 10',
       localidadId: f.localidades[0]!.id,
       barrioId: f.barrios.find((b) => b.localidadId === f.localidades[0]!.id)!.id,
       correo: 'familia.perez@correo.com',
@@ -255,6 +255,29 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       expect(campos(r)).toContain('barrioId');
       const sinLocalidad = await enviar(await datos({ localidadId: null, barrioId: barrioDeOtra }));
       expect(campos(sinLocalidad)).toContain('localidadId');
+    });
+
+    it('la dirección debe tener el formato estándar: acepta las bien armadas y rechaza el texto libre', async () => {
+      for (const bien of [
+        'Carrera 54 B Bis Sur # 72 A - 30 Este, Apto 301',
+        'Avenida Carrera 46 # 80 - 17',
+        'Vía 40 # 5 - 1',
+      ]) {
+        expect((await enviar(await datos({ direccion: bien }))).status, bien).toBe(201);
+      }
+      for (const mal of [
+        'frente al parque',
+        'Calle 45 # 20-10',
+        'Camino 4 # 5 - 6',
+        'Calle 0 # 5 - 6',
+        'Calle 72 # 54 - 30, <script>',
+        'Calle 1234 # 5 - 6',
+        'calle 72 # 54 - 30',
+      ]) {
+        const r = await enviar(await datos({ direccion: mal }));
+        expect(r.status, mal).toBe(422);
+        expect(campos(r), mal).toContain('direccion');
+      }
     });
 
     it('la dirección, la localidad y el barrio son opcionales', async () => {

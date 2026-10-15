@@ -1822,7 +1822,11 @@ components:
         cuidadorNombre: { type: string }
         cuidadorTipoIdentificacionId: { type: integer }
         cuidadorNumero: { type: string }
-        direccion: { type: string, nullable: true }
+        direccion:
+          type: string
+          nullable: true
+          description: 'Opcional. Formato estándar armado por el portal: tipo de vía, número, # cruce - placa y complemento. Ejemplo: Carrera 54 B Bis Sur # 72 A - 30 Este, Apto 301'
+          example: Calle 72 # 54 - 30
         localidadId: { type: integer, nullable: true }
         barrioId: { type: integer, nullable: true }
         correo: { type: string, format: email }

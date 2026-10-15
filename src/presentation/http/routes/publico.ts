@@ -1,3 +1,4 @@
+import { MENSAJE_DIRECCION, esDireccionEstandar } from '../../../domain/direccion.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Servicios } from '../../../container.js';
@@ -39,7 +40,13 @@ const preinscripcionSchema = z.object({
   cuidadorNombre: nombre('Nombre completo del cuidador'),
   cuidadorTipoIdentificacionId: id('Tipo de identificación del cuidador'),
   cuidadorNumero: numero('Número de identificación del cuidador'),
-  direccion: z.string().trim().max(200, 'Dirección: máximo 200 caracteres').nullish(),
+  // Opcional; si se envía, debe tener el formato estándar de la dirección (el portal la arma por partes).
+  direccion: z
+    .string()
+    .trim()
+    .max(200, 'Dirección: máximo 200 caracteres')
+    .refine((v) => v === '' || esDireccionEstandar(v), MENSAJE_DIRECCION)
+    .nullish(),
   localidadId: z.number().int().positive().nullish(),
   barrioId: z.number().int().positive().nullish(),
   correo: z
