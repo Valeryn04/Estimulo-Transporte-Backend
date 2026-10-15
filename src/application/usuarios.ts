@@ -122,6 +122,25 @@ export class ServicioUsuarios {
     }
   }
 
+  /**
+   * Para avisar mientras se escribe el formulario (antes de enviar) si el usuario o el correo ya los usa otra cuenta.
+   * Solo lo consulta quien administra usuarios.
+   */
+  async disponibilidad(d: { usuario?: string; correo?: string; excluirId?: number }) {
+    const { pool } = this.deps;
+    const excluir = d.excluirId ?? null;
+    const [usuario, correo] = await Promise.all([
+      d.usuario ? usuariosRepo.quienUsa(pool, 'usuario', d.usuario, excluir) : null,
+      d.correo ? usuariosRepo.quienUsa(pool, 'correo', d.correo, excluir) : null,
+    ]);
+    return {
+      usuario: d.usuario ? { disponible: !usuario, usadoPor: usuario?.usuario ?? null } : null,
+      correo: d.correo
+        ? { disponible: !correo, usadoPor: correo?.usuario ?? null, estado: correo?.estado ?? null }
+        : null,
+    };
+  }
+
   async crear(
     actor: Actor,
     d: DatosUsuario & { usuario: string },

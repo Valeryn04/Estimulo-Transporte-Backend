@@ -46,6 +46,7 @@ describe('plantillas de correo configurables (RF-COM-02, RNF-12)', () => {
         cuidadorTipoIdentificacionId: cc,
         cuidadorNumero: String(consecutivo + 1),
         correo: 'familia@correo.com',
+        correoConfirmacion: 'familia@correo.com',
         aceptaAutorizacion: true,
         autorizacionVersion: f.autorizacion.version,
         formularioToken: f.formularioToken,

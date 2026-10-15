@@ -80,6 +80,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
         cuidadorTipoIdentificacionId: cc,
         cuidadorNumero: String(consecutivo + 1),
         correo: 'familia@correo.com',
+        correoConfirmacion: 'familia@correo.com',
         aceptaAutorizacion: true,
         autorizacionVersion: f.autorizacion.version,
         formularioToken: f.formularioToken,

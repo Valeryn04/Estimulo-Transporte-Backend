@@ -46,6 +46,36 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     return (m as RegExpExecArray)[1] as string;
   };
 
+  it('avisa antes de crear si el usuario o el correo ya los usa otra cuenta', async () => {
+    const d = nuevo();
+    const creado = await request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(d);
+    const consulta = (q: string) =>
+      request(e.app).get(`${api}/admin/usuarios/disponibilidad?${q}`).set(auth(admin));
+    const ocupado = await consulta(
+      `usuario=${d.usuario.toUpperCase()}&correo=${encodeURIComponent(d.correo.toUpperCase())}`,
+    );
+    expect(ocupado.status).toBe(200);
+    expect(ocupado.body.usuario).toEqual({ disponible: false, usadoPor: d.usuario });
+    expect(ocupado.body.correo).toMatchObject({ disponible: false, usadoPor: d.usuario });
+    const libre = await consulta('usuario=nadie.lo.usa&correo=libre%40barranquilla.gov.co');
+    expect(libre.body.usuario).toMatchObject({ disponible: true, usadoPor: null });
+    expect(libre.body.correo).toMatchObject({ disponible: true, usadoPor: null });
+    // Al editar a esa misma persona, su propio correo no cuenta como ocupado.
+    const propio = await consulta(
+      `correo=${encodeURIComponent(d.correo)}&excluirId=${creado.body.id}`,
+    );
+    expect(propio.body.correo.disponible).toBe(true);
+    // Solo quien administra usuarios lo consulta.
+    const analista = await crearCuenta(e, 'ANALISTA');
+    expect(
+      (
+        await request(e.app)
+          .get(`${api}/admin/usuarios/disponibilidad?correo=a%40b.co`)
+          .set(auth(analista))
+      ).status,
+    ).toBe(403);
+  });
+
   it('lista los 7 roles del numeral 3.2 con sus permisos', async () => {
     expect(Object.keys(rolIds).sort()).toEqual(
       [

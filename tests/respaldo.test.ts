@@ -104,6 +104,7 @@ describe('copias de respaldo y restauración (RNF-08, RNF-06)', () => {
           cuidadorTipoIdentificacionId: cc,
           cuidadorNumero: '5550002',
           correo: 'familia@correo.com',
+          correoConfirmacion: 'familia@correo.com',
           aceptaAutorizacion: true,
           autorizacionVersion: f.autorizacion.version,
           formularioToken: f.formularioToken,

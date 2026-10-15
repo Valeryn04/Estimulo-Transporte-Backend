@@ -33,41 +33,48 @@ const numero = (etiqueta: string) =>
     .min(4, `${etiqueta}: escriba al menos 4 caracteres`)
     .max(25, `${etiqueta}: máximo 25 caracteres`);
 
-const preinscripcionSchema = z.object({
-  pcdNombre: nombre('Nombre completo de la persona con discapacidad'),
-  pcdTipoIdentificacionId: id('Tipo de identificación de la persona con discapacidad'),
-  pcdNumero: numero('Número de identificación de la persona con discapacidad'),
-  cuidadorNombre: nombre('Nombre completo del cuidador'),
-  cuidadorTipoIdentificacionId: id('Tipo de identificación del cuidador'),
-  cuidadorNumero: numero('Número de identificación del cuidador'),
-  // Opcional; si se envía, debe tener el formato estándar de la dirección (el portal la arma por partes).
-  direccion: z
-    .string()
-    .trim()
-    .max(200, 'Dirección: máximo 200 caracteres')
-    .refine((v) => v === '' || esDireccionEstandar(v), MENSAJE_DIRECCION)
-    .nullish(),
-  localidadId: z.number().int().positive().nullish(),
-  barrioId: z.number().int().positive().nullish(),
-  correo: z
-    .string({ error: 'Correo electrónico: escríbalo' })
-    .trim()
-    .max(150, 'Correo electrónico: máximo 150 caracteres')
-    .pipe(
-      z.email({
-        error: 'Correo electrónico: escriba un correo válido, por ejemplo nombre@correo.com',
-      }),
-    ),
-  aceptaAutorizacion: z.literal(true, {
-    error: 'Autorización de datos: debe aceptarla para poder enviar la preinscripción',
-  }),
-  autorizacionVersion: z
-    .number({ error: 'Autorización de datos: recargue la página' })
-    .int()
-    .positive(),
-  formularioToken: z.string({ error: 'Recargue la página e intente de nuevo' }).min(10).max(2000),
-  contactoAlterno: z.string().max(200).optional(),
-});
+const preinscripcionSchema = z
+  .object({
+    pcdNombre: nombre('Nombre completo de la persona con discapacidad'),
+    pcdTipoIdentificacionId: id('Tipo de identificación de la persona con discapacidad'),
+    pcdNumero: numero('Número de identificación de la persona con discapacidad'),
+    cuidadorNombre: nombre('Nombre completo del cuidador'),
+    cuidadorTipoIdentificacionId: id('Tipo de identificación del cuidador'),
+    cuidadorNumero: numero('Número de identificación del cuidador'),
+    // Opcional; si se envía, debe tener el formato estándar de la dirección (el portal la arma por partes).
+    direccion: z
+      .string()
+      .trim()
+      .max(200, 'Dirección: máximo 200 caracteres')
+      .refine((v) => v === '' || esDireccionEstandar(v), MENSAJE_DIRECCION)
+      .nullish(),
+    localidadId: z.number().int().positive().nullish(),
+    barrioId: z.number().int().positive().nullish(),
+    correo: z
+      .string({ error: 'Correo electrónico: escríbalo' })
+      .trim()
+      .max(150, 'Correo electrónico: máximo 150 caracteres')
+      .pipe(
+        z.email({
+          error: 'Correo electrónico: escriba un correo válido, por ejemplo nombre@correo.com',
+        }),
+      ),
+    // Se escribe dos veces para evitar un error de digitación: el enlace de verificación llega a este correo.
+    correoConfirmacion: z.string({ error: 'Confirmación del correo: escríbalo otra vez' }).trim(),
+    aceptaAutorizacion: z.literal(true, {
+      error: 'Autorización de datos: debe aceptarla para poder enviar la preinscripción',
+    }),
+    autorizacionVersion: z
+      .number({ error: 'Autorización de datos: recargue la página' })
+      .int()
+      .positive(),
+    formularioToken: z.string({ error: 'Recargue la página e intente de nuevo' }).min(10).max(2000),
+    contactoAlterno: z.string().max(200).optional(),
+  })
+  .refine((d) => d.correo.toLowerCase() === d.correoConfirmacion.toLowerCase(), {
+    path: ['correoConfirmacion'],
+    message: 'Confirmación del correo: los dos correos no coinciden, revíselos',
+  });
 
 const verificarSchema = z.object({
   token: z.string({ error: 'El enlace no es válido' }).min(20).max(200),

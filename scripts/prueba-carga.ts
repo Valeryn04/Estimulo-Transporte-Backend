@@ -134,6 +134,7 @@ try {
                 cuidadorTipoIdentificacionId: cc,
                 cuidadorNumero: String(n + 1),
                 correo: `carga${contador}@correo.com`,
+                correoConfirmacion: `carga${contador}@correo.com`,
                 aceptaAutorizacion: true,
                 autorizacionVersion: formulario.autorizacion.version,
                 formularioToken: formulario.formularioToken,

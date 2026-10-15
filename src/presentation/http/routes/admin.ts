@@ -71,6 +71,12 @@ const motivoSchema = z.object({
     .max(500),
 });
 
+const disponibilidadSchema = z.object({
+  usuario: z.string().trim().max(40).optional(),
+  correo: z.string().trim().max(150).optional(),
+  excluirId: z.coerce.number().int().positive().optional(),
+});
+
 const filtroSchema = paginacionSchema.extend({
   q: z.string().trim().max(100).optional(),
   estado: z.enum(['ACTIVO', 'BLOQUEADO', 'BAJA']).optional(),
@@ -119,6 +125,12 @@ export function rutasAdmin(s: Servicios): Router {
       offset: (f.pagina - 1) * f.tamano,
     });
     res.json({ items, total, pagina: f.pagina, tamano: f.tamano });
+  });
+
+  /** Si el usuario o el correo ya los usa otra cuenta (se consulta mientras se llena el formulario). */
+  r.get('/usuarios/disponibilidad', requierePermisos('usuarios.administrar'), async (req, res) => {
+    const f = disponibilidadSchema.parse(req.query);
+    res.json(await s.usuarios.disponibilidad(f));
   });
 
   r.get('/usuarios/:id', requierePermisos('usuarios.administrar'), async (req, res) => {

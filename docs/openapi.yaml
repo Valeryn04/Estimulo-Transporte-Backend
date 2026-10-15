@@ -676,6 +676,44 @@ paths:
         '403': { $ref: '#/components/responses/SinPermiso' }
         '422': { $ref: '#/components/responses/Validacion' }
 
+  /admin/usuarios/disponibilidad:
+    get:
+      tags: [Administración de usuarios]
+      summary: Saber si un usuario o un correo ya los usa otra cuenta
+      description: Se consulta mientras se llena el formulario, antes de enviarlo. No distingue mayúsculas de minúsculas.
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: usuario, in: query, schema: { type: string } }
+        - { name: correo, in: query, schema: { type: string } }
+        - {
+            name: excluirId,
+            in: query,
+            schema: { type: integer },
+            description: Persona que se está editando (su propio dato no cuenta como ocupado),
+          }
+      responses:
+        '200':
+          description: Disponibilidad de cada dato consultado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario:
+                    type: object
+                    nullable: true
+                    properties:
+                      disponible: { type: boolean }
+                      usadoPor: { type: string, nullable: true }
+                  correo:
+                    type: object
+                    nullable: true
+                    properties:
+                      disponible: { type: boolean }
+                      usadoPor: { type: string, nullable: true }
+                      estado: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
   /admin/usuarios/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1811,6 +1849,7 @@ components:
           cuidadorTipoIdentificacionId,
           cuidadorNumero,
           correo,
+          correoConfirmacion,
           aceptaAutorizacion,
           autorizacionVersion,
           formularioToken,
@@ -1830,6 +1869,12 @@ components:
         localidadId: { type: integer, nullable: true }
         barrioId: { type: integer, nullable: true }
         correo: { type: string, format: email }
+        correoConfirmacion:
+          {
+            type: string,
+            format: email,
+            description: El mismo correo escrito otra vez; debe coincidir,
+          }
         aceptaAutorizacion: { type: boolean, enum: [true] }
         autorizacionVersion: { type: integer }
         formularioToken: { type: string }

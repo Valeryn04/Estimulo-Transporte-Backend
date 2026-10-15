@@ -138,6 +138,23 @@ export const usuariosRepo = {
     return (r.rows[0] as { id: number }).id;
   },
 
+  /** ¿Quién usa ya ese usuario o ese correo? (sin distinguir mayúsculas; se puede excluir a la persona que se edita). */
+  async quienUsa(
+    db: Queryable,
+    campo: 'usuario' | 'correo',
+    valor: string,
+    excluirId: number | null,
+  ): Promise<{ usuario: string; estado: string } | null> {
+    const columna = campo === 'usuario' ? 'usuario' : 'correo';
+    const r = await db.query<{ usuario: string; estado: string }>(
+      `SELECT usuario, estado FROM usuarios
+        WHERE lower(${columna}) = lower($1) AND ($2::integer IS NULL OR id <> $2)
+        LIMIT 1`,
+      [valor, excluirId],
+    );
+    return r.rows[0] ?? null;
+  },
+
   async actualizarDatos(
     db: Queryable,
     id: number,

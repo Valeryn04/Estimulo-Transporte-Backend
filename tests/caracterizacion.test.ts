@@ -56,6 +56,7 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
         cuidadorTipoIdentificacionId: cc,
         cuidadorNumero,
         correo: 'familia@correo.com',
+        correoConfirmacion: 'familia@correo.com',
         aceptaAutorizacion: true,
         autorizacionVersion: f.autorizacion.version,
         formularioToken: f.formularioToken,

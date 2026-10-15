@@ -65,6 +65,10 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       autorizacionVersion: f.autorizacion.version,
       formularioToken: f.formularioToken,
       ...extra,
+      // Por defecto la confirmación es igual al correo que se haya indicado.
+      correoConfirmacion: (extra.correoConfirmacion ??
+        extra.correo ??
+        'familia.perez@correo.com') as string,
     };
   }
 
@@ -166,6 +170,7 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
         ...d,
         formularioToken: f.formularioToken,
         correo: 'otro@correo.com',
+        correoConfirmacion: 'otro@correo.com',
       });
       expect(otra.status).toBe(409);
       expect(otra.body.error.codigo).toBe('SOLICITUD_EXISTENTE');
@@ -255,6 +260,28 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       expect(campos(r)).toContain('barrioId');
       const sinLocalidad = await enviar(await datos({ localidadId: null, barrioId: barrioDeOtra }));
       expect(campos(sinLocalidad)).toContain('localidadId');
+    });
+
+    it('el correo se escribe dos veces: si no coinciden, no se envía y el error es puntual', async () => {
+      const r = await enviar(
+        await datos({ correo: 'familia@correo.com', correoConfirmacion: 'famlia@correo.com' }),
+      );
+      expect(r.status).toBe(422);
+      expect(campos(r)).toContain('correoConfirmacion');
+      expect(JSON.stringify(r.body)).toContain('no coinciden');
+      // Sin la confirmación tampoco se acepta.
+      const sin = await datos();
+      const { correoConfirmacion: _omitido, ...cuerpo } = sin;
+      void _omitido;
+      expect((await enviar(cuerpo)).status).toBe(422);
+      // Mayúsculas y minúsculas no importan.
+      expect(
+        (
+          await enviar(
+            await datos({ correo: 'Mixto@Correo.com', correoConfirmacion: 'mixto@correo.COM' }),
+          )
+        ).status,
+      ).toBe(201);
     });
 
     it('la dirección debe tener el formato estándar: acepta las bien armadas y rechaza el texto libre', async () => {
