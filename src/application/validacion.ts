@@ -1,4 +1,5 @@
 import { ServicioCruces } from './cruces.js';
+import type { ServicioPriorizacion } from './priorizacion.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import {
@@ -17,7 +18,12 @@ import {
   type ItemChequeo,
 } from '../domain/validacion.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
-import { withTransaction } from '../infrastructure/db/pool.js';
+import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
+import {
+  calculosRepo,
+  matricesRepo,
+  variablesCasoRepo,
+} from '../infrastructure/repositories/priorizacion.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { caracterizacionRepo } from '../infrastructure/repositories/caracterizacion.js';
 import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
@@ -73,6 +79,7 @@ export class ServicioValidacion {
     private readonly correos: ServicioCorreos,
     private readonly documentos: ServicioDocumentos,
     private readonly cruces: ServicioCruces,
+    private readonly priorizacion: ServicioPriorizacion,
   ) {
     this.cipher = new DataCipher(deps.env.encryption);
   }
@@ -337,6 +344,7 @@ export class ServicioValidacion {
         puedeVer: verSensibles && x.archivo !== null,
       })),
       items: items.map((i) => this.itemVista(i)),
+      priorizacion: await this.vistaPriorizacion(pool, solicitudId),
       // RF-VAL-03: coincidencias de la persona y su cuidador en los archivos de cruce de la lista de chequeo.
       alertas: await this.cruces.alertas(
         pool,
@@ -450,9 +458,84 @@ export class ServicioValidacion {
 
   // ---------------------------------------------------------------- decisión
 
-  /** Datos de priorización que aún faltan (los define la matriz vigente; se completa en la etapa de priorización). */
-  private async variablesFaltantes(): Promise<string[]> {
-    return [];
+  /** Datos de priorización que el validador aún no registró (los define la matriz vigente, RF-PRI-01). */
+  private async variablesFaltantes(db: Queryable, solicitudId: number): Promise<string[]> {
+    const matriz = await matricesRepo.vigente(db);
+    if (!matriz) return [];
+    const valores = await variablesCasoRepo.valores(db, solicitudId);
+    return matriz.variables
+      .filter(
+        (v) => v.origen === 'VALIDADOR' && !v.opciones.some((o) => o.codigo === valores[v.codigo]),
+      )
+      .map((v) => v.nombre);
+  }
+
+  /** Datos de priorización del caso: lo que pide la matriz vigente y lo que ya se registró. */
+  private async vistaPriorizacion(db: Queryable, solicitudId: number) {
+    const matriz = await matricesRepo.vigente(db);
+    const valores = await variablesCasoRepo.valores(db, solicitudId);
+    const calculo = await calculosRepo.vigente(db, solicitudId);
+    return {
+      matrizVersion: matriz?.version ?? null,
+      variables: (matriz?.variables ?? [])
+        .filter((v) => v.origen === 'VALIDADOR')
+        .map((v) => ({
+          codigo: v.codigo,
+          nombre: v.nombre,
+          descripcion: v.descripcion,
+          opciones: v.opciones.map((o) => ({ codigo: o.codigo, etiqueta: o.etiqueta })),
+          valor: v.opciones.some((o) => o.codigo === valores[v.codigo]) ? valores[v.codigo] : null,
+        })),
+      puntaje: calculo
+        ? {
+            total: calculo.puntaje,
+            matrizVersion: calculo.matrizVersion,
+            calculadoAt: calculo.calculadoAt.toISOString(),
+            detalle: calculo.detalle,
+          }
+        : null,
+    };
+  }
+
+  /** El validador registra un dato de priorización mientras revisa el caso. */
+  async registrarVariable(
+    actor: Actor,
+    solicitudId: number,
+    codigo: string,
+    valor: string,
+    ctx: ContextoPeticion,
+  ) {
+    const { pool } = this.deps;
+    await withTransaction(pool, async (tx) => {
+      await fijarActor(tx, actor.id);
+      await this.exigirRevision(tx, actor, solicitudId);
+      const matriz = await matricesRepo.vigente(tx);
+      const variable = matriz?.variables.find(
+        (v) => v.codigo === codigo && v.origen === 'VALIDADOR',
+      );
+      if (!variable) {
+        throw notFound('Ese dato no se pide en la priorización', 'VARIABLE_NO_ENCONTRADA');
+      }
+      if (!variable.opciones.some((o) => o.codigo === valor)) {
+        throw errorValidacion([
+          { campo: 'valor', mensaje: `${variable.nombre}: elija una de las opciones` },
+        ]);
+      }
+      const antes = (await variablesCasoRepo.valores(tx, solicitudId))[codigo] ?? null;
+      await variablesCasoRepo.guardar(tx, solicitudId, codigo, valor, actor.id);
+      await bitacoraRepo.registrar(tx, {
+        usuarioId: actor.id,
+        modulo: MODULO.VALIDACION,
+        accion: ACCION.VARIABLE_PRIORIZACION_REGISTRADA,
+        entidad: 'solicitud',
+        entidadId: solicitudId,
+        solicitudId,
+        valorAnterior: { [codigo]: antes },
+        valorNuevo: { [codigo]: valor },
+        ip: ctx.ip,
+      });
+    });
+    return this.vistaPriorizacion(pool, solicitudId);
   }
 
   /** Enlace seguro y de vigencia limitada para que la persona consulte o corrija su caso (RNF-03). */
@@ -502,7 +585,7 @@ export class ServicioValidacion {
         subsanacionesPrevias: await validacionRepo.contarSubsanaciones(tx, solicitudId),
         maxRondas,
         subsanacionVencida,
-        variablesFaltantes: await this.variablesFaltantes(),
+        variablesFaltantes: await this.variablesFaltantes(tx, solicitudId),
       });
       if (errores.length > 0) throw errorValidacion(errores);
 
@@ -605,6 +688,12 @@ export class ServicioValidacion {
           });
         }
       }
+      let puntaje: number | null = null;
+      if (entrada.decision === 'APROBAR') {
+        // RF-PRI-01: al quedar validado, el caso recibe su puntaje con la matriz vigente.
+        const r = await this.priorizacion.calcularEnTx(tx, solicitudId, null);
+        if (r.ok) puntaje = r.calculo.puntaje;
+      }
       await bitacoraRepo.registrar(tx, {
         usuarioId: actor.id,
         modulo: MODULO.VALIDACION,
@@ -615,7 +704,7 @@ export class ServicioValidacion {
         valorAnterior: { estado: base.estado },
         valorNuevo: { estado: nuevoEstado, decision: entrada.decision },
         justificacion: motivacion,
-        detalle: { ronda: v.ronda, decisionId, venceAt: venceAt?.toISOString() ?? null },
+        detalle: { ronda: v.ronda, decisionId, venceAt: venceAt?.toISOString() ?? null, puntaje },
         ip: ctx.ip,
       });
       return { estado: nuevoEstado, venceAt };

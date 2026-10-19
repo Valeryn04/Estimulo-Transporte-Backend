@@ -10,6 +10,8 @@ import { ServicioConsulta } from './application/consulta.js';
 import { ServicioCorreos } from './application/correos.js';
 import { ServicioParametros } from './application/parametros.js';
 import { ServicioPlantillas } from './application/plantillas.js';
+import { ServicioMatriz } from './application/matriz.js';
+import { ServicioPriorizacion } from './application/priorizacion.js';
 import { ServicioPreinscripcion } from './application/preinscripcion.js';
 import { ServicioRequisitos } from './application/requisitos.js';
 import { ServicioRoles } from './application/roles.js';
@@ -38,6 +40,8 @@ export interface Servicios {
   requisitos: ServicioRequisitos;
   subsanacion: ServicioSubsanacion;
   cruces: ServicioCruces;
+  matriz: ServicioMatriz;
+  priorizacion: ServicioPriorizacion;
 }
 
 export function crearDependencias(env: Env): Dependencias {
@@ -54,6 +58,7 @@ export function crearServicios(deps: Dependencias): Servicios {
   const correos = new ServicioCorreos(deps);
   const documentos = new ServicioDocumentos(deps);
   const cruces = new ServicioCruces(deps);
+  const priorizacion = new ServicioPriorizacion(deps, documentos);
   return {
     autenticacion: new ServicioAutenticacion(deps),
     usuarios: new ServicioUsuarios(deps, correos),
@@ -67,9 +72,11 @@ export function crearServicios(deps: Dependencias): Servicios {
     caracterizacion: new ServicioCaracterizacion(deps),
     documentos,
     radicacion: new ServicioRadicacion(deps, correos, documentos),
-    validacion: new ServicioValidacion(deps, correos, documentos, cruces),
+    validacion: new ServicioValidacion(deps, correos, documentos, cruces, priorizacion),
     requisitos: new ServicioRequisitos(deps),
     subsanacion: new ServicioSubsanacion(deps, correos),
     cruces,
+    matriz: new ServicioMatriz(deps, priorizacion),
+    priorizacion,
   };
 }

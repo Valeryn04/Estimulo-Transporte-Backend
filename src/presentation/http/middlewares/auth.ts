@@ -51,6 +51,16 @@ export function requierePermisos(...permisos: string[]): RequestHandler {
   };
 }
 
+/** Basta con tener uno de los permisos (por ejemplo, quien configura y quien aprueba pueden ver lo mismo). */
+export function requiereAlguno(...permisos: string[]): RequestHandler {
+  return (req, _res, next) => {
+    const actor = req.actor;
+    if (!actor) throw unauthorized();
+    if (!permisos.some((p) => actor.permisos.has(p))) throw forbidden();
+    next();
+  };
+}
+
 /** Sesión del ciudadano para consultar su solicitud: limitada a esa solicitud y de corta duración. */
 export function autenticarCiudadano(tokens: TokenService): RequestHandler {
   return (req, _res, next) => {

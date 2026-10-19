@@ -90,9 +90,22 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
     });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
   };
-  /** Marca todos los requisitos como cumplidos. */
+  /** Registra los datos de priorización que pide la matriz vigente (la primera opción de cada uno). */
+  const capturarVariables = async (c: CuentaPrueba, id: number) => {
+    const { priorizacion } = (await caso(c, id)) as unknown as {
+      priorizacion: { variables: { codigo: string; opciones: { codigo: string }[] }[] };
+    };
+    for (const v of priorizacion.variables) {
+      const r = await put(c, `/casos/${id}/variables/${v.codigo}`, {
+        valor: v.opciones[0]!.codigo,
+      });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+    }
+  };
+  /** Marca todos los requisitos como cumplidos y registra los datos de priorización. */
   const cumplirTodo = async (c: CuentaPrueba, id: number) => {
     for (const item of (await caso(c, id)).items) await marcar(c, id, item, 'CUMPLE');
+    await capturarVariables(c, id);
   };
   const estadoDe = async (id: number) =>
     (await e.pool.query<{ estado: string }>(`SELECT estado FROM solicitudes WHERE id = $1`, [id]))
@@ -346,7 +359,8 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const r = await post(validador, `/casos/${s.solicitudId}/decision`, { decision: 'APROBAR' });
       expect(r.status, JSON.stringify(r.body)).toBe(201);
       expect(r.body.estado.codigo).toBe('VALIDADA');
-      expect(await estadoDe(s.solicitudId)).toBe('VALIDADA');
+      // Al validarse recibe su puntaje y pasa a priorizada (RF-PRI-01).
+      expect(await estadoDe(s.solicitudId)).toBe('PRIORIZADA');
       const correo = await ultimoCorreo();
       expect(correo.to).toBe('aprobada@correo.com');
       expect(correo.subject).toContain(s.radicado);
@@ -524,6 +538,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       expect(c.items.filter((i) => i.resultado === 'CUMPLE')).toHaveLength(c.items.length - 1);
       expect(c.items.find((i) => i.id === sisben.id)!.resultado).toBe('NO_CUMPLE');
       await marcar(validador, s.solicitudId, sisben, 'CUMPLE');
+      await capturarVariables(validador, s.solicitudId);
       const aprobada = await post(validador, `/casos/${s.solicitudId}/decision`, {
         decision: 'APROBAR',
       });

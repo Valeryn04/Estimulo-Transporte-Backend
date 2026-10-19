@@ -34,6 +34,15 @@ export interface ArchivoEntrada {
   nombre: string;
 }
 
+/** Un archivo de evidencia ya guardado (cifrado, con su hash). */
+export interface EvidenciaArchivo {
+  ruta: string;
+  nombre: string;
+  mime: string;
+  tamanoBytes: number;
+  sha256: string;
+}
+
 export type EstadoDocumento = 'PENDIENTE' | 'CARGADO' | 'RECHAZADO';
 
 /** Tamaño máximo de un modelo de carta publicado por la Gerencia. */
@@ -186,6 +195,31 @@ export class ServicioDocumentos {
       ]);
     }
     return { formato, nombre: nombreSeguro(archivo.nombre) };
+  }
+
+  /**
+   * Guarda un archivo de evidencia (excepciones de priorización, novedades, entregas): se valida por su contenido, se
+   * cifra y se guarda con su hash. Quien llama conserva los datos devueltos junto a su registro.
+   */
+  async guardarEvidencia(carpeta: string, archivo: ArchivoEntrada): Promise<EvidenciaArchivo> {
+    const { formato, nombre } = await this.validar(archivo);
+    const sha256 = createHash('sha256').update(archivo.contenido).digest('hex');
+    const ruta = this.almacen.nuevaClave(carpeta);
+    await this.almacen.guardar(ruta, this.cipher.cifrarBytes(archivo.contenido));
+    return { ruta, nombre, mime: MIME[formato], tamanoBytes: archivo.contenido.length, sha256 };
+  }
+
+  /** Entrega una evidencia descifrada y verificada contra su hash. */
+  async leerEvidencia(e: EvidenciaArchivo) {
+    const contenido = this.cipher.descifrarBytes(await this.almacen.leer(e.ruta));
+    if (createHash('sha256').update(contenido).digest('hex') !== e.sha256) {
+      throw new AppError(
+        500,
+        'INTEGRIDAD_DOCUMENTO',
+        'El archivo no superó la verificación de integridad. Comuníquese con la Gerencia de Desarrollo Social.',
+      );
+    }
+    return { nombre: e.nombre, mime: e.mime, contenido };
   }
 
   /** Carga o reemplaza el documento de la solicitud (RF-CAR-03). */

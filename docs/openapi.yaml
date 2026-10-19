@@ -1858,6 +1858,277 @@ paths:
         '200': { description: Cruces activos (código y nombre) }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/validacion/casos/{id}/variables/{codigo}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [Validación]
+      summary: Registrar un dato de priorización del caso (RF-PRI-01)
+      description: 'Solo variables de la matriz vigente cuyo origen es el validador, con una de sus opciones. El caso debe estar en revisión por quien lo registra. Sin estos datos no se puede aprobar la validación.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [valor]
+              properties:
+                valor: { type: string, description: Código de la opción elegida }
+      responses:
+        '200': { description: Datos de priorización del caso }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/matriz:
+    get:
+      tags: [Priorización]
+      summary: Versiones de la matriz de ponderación (RF-PRI-02)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Versiones, la más reciente primero }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Priorización]
+      summary: Crear una versión en borrador
+      description: 'Copia de la versión indicada (por defecto, la vigente) o con el contenido enviado. Solo puede haber una versión en borrador o pendiente de aprobación.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                desdeId: { type: integer }
+                definicion: { $ref: '#/components/schemas/MatrizEntrada' }
+      responses:
+        '201': { description: Borrador creado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/matriz/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Priorización]
+      summary: Una versión de la matriz con sus variables, opciones y desempate
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Versión }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Priorización]
+      summary: Modificar una versión en borrador
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MatrizEntrada' }
+      responses:
+        '200': { description: Versión modificada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/matriz/{id}/simulacion:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Priorización]
+      summary: Simular el efecto de una versión sobre los casos validados
+      description: 'Compara puntaje y posición con la versión vigente. No guarda nada.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Resumen y casos por posición simulada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/matriz/{id}/solicitar-aprobacion:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Priorización]
+      summary: Pedir la aprobación del responsable del proceso
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Versión en aprobación }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/matriz/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Priorización]
+      summary: Aprobar o rechazar la versión (RF-PRI-02)
+      description: 'Quien decide debe ser distinto de quien pidió la aprobación. Al aprobar queda vigente y la anterior se archiva; el rechazo exige motivo.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionEntrada' }
+      responses:
+        '200': { description: Versión decidida }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/priorizacion/filtros:
+    get:
+      tags: [Priorización]
+      summary: Localidades y tipos de transporte para filtrar el listado
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Listas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/priorizacion/listado:
+    get:
+      tags: [Priorización]
+      summary: Listado priorizado de casos validados (RF-PRI-04)
+      description: 'De mayor a menor puntaje final (calculado más ajuste aprobado). Los empates se resuelven con los criterios de desempate de la matriz vigente y cada fila trae el criterio aplicado.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: localidadId, in: query, schema: { type: integer } }
+        - { name: transporteId, in: query, schema: { type: integer } }
+        - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Casos priorizados }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/priorizacion/calcular:
+    post:
+      tags: [Priorización]
+      summary: Calcular el puntaje de forma masiva (RF-PRI-01)
+      description: 'Calcula los casos validados de la vigencia activa que aún no tienen puntaje. Con recalcular también los calculados con otra versión de la matriz (el cálculo anterior queda en el historial).'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recalcular: { type: boolean }
+      responses:
+        '200': { description: Casos calculados y omitidos (con el motivo) }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/priorizacion/casos/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Priorización]
+      summary: 'Puntaje de un caso: cálculos con su detalle y excepciones'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Cálculos y excepciones del caso }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/priorizacion/casos/{id}/calcular:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Priorización]
+      summary: Calcular el puntaje de un caso validado (RF-PRI-01)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Cálculo guardado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/priorizacion/casos/{id}/excepciones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Priorización]
+      summary: Proponer un ajuste de prioridad (RF-PRI-03)
+      description: 'Exige justificación y evidencia adjunta (PDF, JPG o PNG). El ajuste solo se aplica cuando lo aprueba el responsable del proceso; el puntaje calculado no se modifica.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ajuste, justificacion, archivo]
+              properties:
+                ajuste: { type: number, description: 'Puntos a sumar o restar, entre -100 y 100, distinto de cero' }
+                justificacion: { type: string, minLength: 20, maxLength: 2000 }
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { description: Excepción propuesta }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/priorizacion/excepciones:
+    get:
+      tags: [Priorización]
+      summary: Excepciones propuestas y decididas
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [PROPUESTA, APROBADA, RECHAZADA] } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Excepciones }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/priorizacion/excepciones/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Priorización]
+      summary: Aprobar o rechazar una excepción
+      description: 'Solo el responsable del proceso, distinto de quien la propuso. Una excepción decidida no se modifica.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionEntrada' }
+      responses:
+        '200': { description: Excepción decidida }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/priorizacion/excepciones/{id}/evidencia:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Priorización]
+      summary: Descargar la evidencia de una excepción
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
 components:
   securitySchemes:
@@ -1879,6 +2150,41 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+    MatrizEntrada:
+      type: object
+      required: [variables]
+      properties:
+        notas: { type: string }
+        desempate:
+          type: array
+          description: 'Criterios en orden: VARIABLE:<CODIGO> (gana el mayor aporte) o FECHA_RADICACION (gana la más antigua)'
+          items: { type: string }
+        variables:
+          type: array
+          items:
+            type: object
+            required: [codigo, nombre, origen, peso, opciones]
+            properties:
+              codigo: { type: string }
+              nombre: { type: string }
+              descripcion: { type: string }
+              origen: { type: string, enum: [VALIDADOR, SUBSIDIOS], description: 'VALIDADOR lo registra el validador; SUBSIDIOS sale de la caracterización' }
+              peso: { type: number }
+              opciones:
+                type: array
+                items:
+                  type: object
+                  required: [codigo, etiqueta, puntos]
+                  properties:
+                    codigo: { type: string }
+                    etiqueta: { type: string }
+                    puntos: { type: number }
+    DecisionEntrada:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APROBAR, RECHAZAR] }
+        motivo: { type: string, description: Obligatorio al rechazar }
     CruceEntrada:
       type: object
       required: [nombre, columnaIdentificacion, aplicaA]

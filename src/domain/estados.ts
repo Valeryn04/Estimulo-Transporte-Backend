@@ -6,7 +6,8 @@ export type EstadoSolicitud =
   | 'EN_SUBSANACION'
   | 'SUBSANADA'
   | 'VALIDADA'
-  | 'NO_CUMPLE';
+  | 'NO_CUMPLE'
+  | 'PRIORIZADA';
 
 export interface DescripcionEstado {
   etapa: string;
@@ -75,6 +76,14 @@ export const ESTADOS: Record<EstadoSolicitud, DescripcionEstado> = {
       'Su solicitud cumplió los requisitos. Continúa con la priorización y la asignación, que dependen de los cupos y del presupuesto.',
     siguientePaso:
       'Espere. Haber cumplido los requisitos no garantiza el beneficio: le avisaremos si resulta asignado.',
+  },
+  PRIORIZADA: {
+    etapa: 'Priorización',
+    nombre: 'Priorizada',
+    explicacion:
+      'Su solicitud cumplió los requisitos y ya tiene un puntaje de priorización. La asignación depende de ese puntaje, de los cupos y del presupuesto disponibles.',
+    siguientePaso:
+      'Espere. Haber cumplido los requisitos no garantiza el beneficio: le avisaremos por este correo si resulta asignado o queda en lista de espera.',
   },
   NO_CUMPLE: {
     etapa: 'Validación',

@@ -11,6 +11,7 @@ import { hashPassword } from '../src/infrastructure/security/passwords.js';
  *
  *   npm run demo:datos            (la API debe estar encendida en el puerto indicado en .env)
  *   npm run demo:datos -- 10      (cantidad de solicitudes; por defecto 6)
+ *   npm run demo:datos -- 10 --validar   (además, el validador revisa y aprueba las solicitudes nuevas)
  *
  * Las contraseñas de los funcionarios se generan en cada ejecución y se muestran una sola vez en la terminal.
  */
@@ -21,6 +22,7 @@ if (env.nodeEnv === 'production') {
 }
 const API = `http://localhost:${env.port}/api/v1`;
 const cantidad = Math.max(0, Math.min(40, Number(process.argv[2] ?? 6) || 6));
+const validar = process.argv.includes('--validar');
 
 const pool = createPool(env.databaseUrl);
 
@@ -91,7 +93,7 @@ const tokenDeCorreo = async (destinatario: string, ruta: string): Promise<string
 const pdf = (texto: string) =>
   Buffer.from(`%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n% ${texto}\n%%EOF\n`);
 
-async function crearSolicitud(i: number): Promise<string> {
+async function crearSolicitud(i: number): Promise<{ texto: string; radicado: string }> {
   const f = await json<{
     tiposIdentificacion: { id: number; codigo: string }[];
     localidades: { id: number }[];
@@ -179,7 +181,11 @@ async function crearSolicitud(i: number): Promise<string> {
   );
   for (const d of docs.documentos.filter((x) => x.obligatorio)) {
     const form = new FormData();
-    form.append('archivo', new Blob([pdf(d.codigo)], { type: 'application/pdf' }), `${d.codigo}.pdf`);
+    form.append(
+      'archivo',
+      new Blob([pdf(d.codigo)], { type: 'application/pdf' }),
+      `${d.codigo}.pdf`,
+    );
     await json(
       await fetch(`${API}/publico/caracterizacion/documentos/${d.id}`, {
         method: 'POST',
@@ -191,7 +197,63 @@ async function crearSolicitud(i: number): Promise<string> {
   const rad = await json<{ radicado: string }>(
     await fetch(`${API}/publico/caracterizacion/radicar`, { method: 'POST', headers: auth }),
   );
-  return `${rad.radicado} · ${nombre}`;
+  return { texto: `${rad.radicado} · ${nombre}`, radicado: rad.radicado };
+}
+
+/** El validador abre el caso, da por cumplidos los requisitos, registra los datos de priorización y aprueba. */
+async function validarSolicitud(radicado: string, token: string, i: number): Promise<void> {
+  const auth = { Authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  const fila = (
+    await pool.query<{ id: number }>(`SELECT id FROM solicitudes WHERE radicado = $1`, [radicado])
+  ).rows[0];
+  if (!fila) throw new Error(`No se encontró ${radicado}`);
+  const base = `${API}/admin/validacion/casos/${fila.id}`;
+  const caso = await json<{
+    items: { id: number }[];
+    priorizacion: { variables: { codigo: string; opciones: { codigo: string }[] }[] };
+  }>(await fetch(`${base}/tomar`, { method: 'POST', headers: auth, body: '{}' }));
+  for (const item of caso.items) {
+    await json(
+      await fetch(`${base}/items/${item.id}`, {
+        method: 'PUT',
+        headers: auth,
+        body: JSON.stringify({
+          resultado: 'CUMPLE',
+          fuente: 'Consulta de demostración',
+          observacion: '',
+          evidencia: '',
+        }),
+      }),
+    );
+  }
+  for (const [k, v] of caso.priorizacion.variables.entries()) {
+    const opcion = v.opciones[(i + k) % v.opciones.length] as { codigo: string };
+    await json(
+      await fetch(`${base}/variables/${v.codigo}`, {
+        method: 'PUT',
+        headers: auth,
+        body: JSON.stringify({ valor: opcion.codigo }),
+      }),
+    );
+  }
+  await json(
+    await fetch(`${base}/decision`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ decision: 'APROBAR', motivacion: '' }),
+    }),
+  );
+}
+
+async function entrarComo(usuario: string, password: string): Promise<string> {
+  const r = await json<{ token: string }>(
+    await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-requested-with': 'estimulo-portal' },
+      body: JSON.stringify({ usuario, password }),
+    }),
+  );
+  return r.token;
 }
 
 try {
@@ -200,11 +262,27 @@ try {
   console.log('\nFuncionarios de demostración (la contraseña cambia en cada ejecución):\n');
   for (const x of f) console.log(`  ${x.usuario.padEnd(20)} ${x.rol.padEnd(22)} ${x.password}`);
   console.log(`\nCreando ${cantidad} solicitud(es) radicada(s)...`);
+  const nuevas: string[] = [];
   for (let i = 0; i < cantidad; i++) {
     try {
-      console.log('  ✓', await crearSolicitud(i));
+      const r = await crearSolicitud(i);
+      nuevas.push(r.radicado);
+      console.log('  ✓', r.texto);
     } catch (e) {
       console.error('  ✗', (e as Error).message);
+    }
+  }
+  if (validar && nuevas.length > 0) {
+    console.log(`\nValidando ${nuevas.length} solicitud(es) como demo.validador...`);
+    const v = f.find((x) => x.usuario === 'demo.validador');
+    const token = await entrarComo('demo.validador', v?.password ?? '');
+    for (const [i, radicado] of nuevas.entries()) {
+      try {
+        await validarSolicitud(radicado, token, i);
+        console.log('  ✓ validada', radicado);
+      } catch (e) {
+        console.error('  ✗', radicado, (e as Error).message);
+      }
     }
   }
   console.log('\nListo. Ingrese al portal interno con cualquiera de los usuarios de arriba.');

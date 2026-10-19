@@ -37,6 +37,14 @@ const itemSchema = z.object({
   evidencia: z.string().trim().max(1000, 'Evidencia: máximo 1000 caracteres').default(''),
 });
 
+const variableSchema = z.object({
+  valor: z
+    .string({ error: 'Valor: elija una opción' })
+    .trim()
+    .min(1, 'Valor: elija una opción')
+    .max(60),
+});
+
 const decisionSchema = z.object({
   decision: z.enum(DECISIONES, {
     error: 'Decisión: elija aprobar, solicitar subsanación o rechazar',
@@ -108,6 +116,24 @@ export function rutasValidacion(s: Servicios): Router {
         idParam(req),
         idParam(req, 'itemId'),
         d,
+        contexto(req),
+      ),
+    );
+  });
+
+  /** Dato de priorización que registra el validador mientras revisa (RF-PRI-01). */
+  r.put('/casos/:id/variables/:codigo', validar, async (req, res) => {
+    const d = variableSchema.parse(req.body);
+    const codigo = z
+      .string()
+      .regex(/^[A-Z0-9_]{2,60}$/)
+      .parse(req.params.codigo);
+    res.json(
+      await s.validacion.registrarVariable(
+        req.actor!,
+        idParam(req),
+        codigo,
+        d.valor,
         contexto(req),
       ),
     );
