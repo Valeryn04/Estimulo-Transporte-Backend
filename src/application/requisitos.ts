@@ -4,6 +4,7 @@ import { codigoDesdeNombre } from '../domain/texto.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
+import { crucesRepo } from '../infrastructure/repositories/cruces.js';
 import { catalogosRepo } from '../infrastructure/repositories/catalogos.js';
 import {
   requisitosRepo,
@@ -13,9 +14,6 @@ import {
 import { conflict, notFound } from '../shared/errors.js';
 import type { Actor, ContextoPeticion, Dependencias } from './contexto.js';
 import { errorValidacion } from './esquemas.js';
-
-/** Los cruces con archivos que existen hoy (se amplían con la configuración de cargas de cruce). */
-export const CRUCES_DISPONIBLES = ['BENEFICIOS_INCOMPATIBLES'] as const;
 
 function traducirUnicidad(error: unknown): never {
   const e = error as { code?: string; constraint?: string };
@@ -57,10 +55,7 @@ export class ServicioRequisitos {
     if (d.documentoId !== null && !(await requisitosRepo.documentoExiste(db, d.documentoId))) {
       errores.push({ campo: 'documentoId', mensaje: 'Documento: elija un documento de la lista' });
     }
-    if (
-      d.cruceCodigo !== null &&
-      !(CRUCES_DISPONIBLES as readonly string[]).includes(d.cruceCodigo)
-    ) {
+    if (d.cruceCodigo !== null && !(await crucesRepo.codigoExiste(db, d.cruceCodigo))) {
       errores.push({ campo: 'cruceCodigo', mensaje: 'Cruce: elija un cruce de la lista' });
     }
     if (errores.length > 0) throw errorValidacion(errores);

@@ -1729,6 +1729,135 @@ paths:
         '200': { description: Versiones }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/cruces:
+    get:
+      tags: [Cruces]
+      summary: Estructuras de los archivos de cruce y su carga vigente (RF-ADM-05)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Estructuras }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Cruces]
+      summary: Crear la estructura de un archivo de cruce
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CruceEntrada' }
+      responses:
+        '201': { description: Estructura creada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/cruces/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Cruces]
+      summary: Modificar la estructura (queda versionada)
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CruceEntrada' }
+      responses:
+        '200': { description: Estructura modificada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/cruces/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Cruces]
+      summary: Activar la estructura
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Estructura activa }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/cruces/{id}/desactivar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Cruces]
+      summary: Desactivar la estructura (nunca se borra)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Estructura inactiva }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/cruces/{id}/versiones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Cruces]
+      summary: Historial de versiones de la estructura
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Versiones }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/cruces/{id}/cargas:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Cruces]
+      summary: Historial de cargas de la estructura
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Cargas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Cruces]
+      summary: Cargar un archivo CSV de cruce
+      description: 'Se cargan las filas válidas y las demás quedan en el reporte de errores. Si falta la columna de identificación el archivo se rechaza completo. La carga queda como vigente; las anteriores, como historia.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { description: Carga registrada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/cruces/cargas/{cargaId}/errores:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Cruces]
+      summary: Reporte de errores de una carga (CSV)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo CSV }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/requisitos/cruces:
+    get:
+      tags: [Requisitos]
+      summary: Cruces con archivo que un requisito puede usar
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Cruces activos (código y nombre) }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
 
 components:
   securitySchemes:
@@ -1750,6 +1879,16 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+    CruceEntrada:
+      type: object
+      required: [nombre, columnaIdentificacion, aplicaA]
+      properties:
+        nombre: { type: string }
+        entidad: { type: string }
+        descripcion: { type: string }
+        columnaIdentificacion: { type: string, description: 'Encabezado de la columna con el número de identificación' }
+        columnaDetalle: { type: string, nullable: true, description: 'Encabezado de la columna que se muestra en la alerta' }
+        aplicaA: { type: string, enum: [PCD, CUIDADOR, AMBOS] }
     Salud:
       type: object
       required: [estado, baseDeDatos]

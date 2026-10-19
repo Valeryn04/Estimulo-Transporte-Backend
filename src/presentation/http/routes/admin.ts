@@ -4,6 +4,7 @@ import type { Servicios } from '../../../container.js';
 import { autenticarInterno, requierePermisos } from '../middlewares/auth.js';
 import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { rutasConfiguracion } from './configuracion.js';
+import { rutasCruces } from './cruces.js';
 import { rutasValidacion } from './validacion.js';
 
 const rolIdSchema = z
@@ -182,6 +183,7 @@ export function rutasAdmin(s: Servicios): Router {
   );
 
   r.use('/validacion', rutasValidacion(s));
+  r.use('/cruces', rutasCruces(s));
   r.use(rutasConfiguracion(s));
 
   return r;

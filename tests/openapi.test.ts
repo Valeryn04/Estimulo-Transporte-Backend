@@ -30,6 +30,7 @@ function rutasDelCodigo(): Set<string> {
     { archivo: 'src/presentation/http/routes/admin.ts', prefijo: '/admin' },
     { archivo: 'src/presentation/http/routes/configuracion.ts', prefijo: '/admin' },
     { archivo: 'src/presentation/http/routes/validacion.ts', prefijo: '/admin/validacion' },
+    { archivo: 'src/presentation/http/routes/cruces.ts', prefijo: '/admin/cruces' },
     { archivo: 'src/presentation/http/app.ts', prefijo: '' },
   ];
   const rutas = new Set<string>();
@@ -37,7 +38,9 @@ function rutasDelCodigo(): Set<string> {
     const codigo = readFileSync(archivo, 'utf8');
     // Admite la ruta en la misma línea o en la siguiente (código formateado por Prettier).
     for (const m of codigo.matchAll(/\b(?:r|v1)\.(get|post|put|patch|delete)\(\s*'([^']+)'/g)) {
-      rutas.add(`${m[1]!.toUpperCase()} ${prefijo}${m[2]!.replace(/:(\w+)/g, '{$1}')}`);
+      rutas.add(
+        `${m[1]!.toUpperCase()} ${(prefijo + (m[2] === '/' ? '' : m[2]!)).replace(/:(\w+)/g, '{$1}')}`,
+      );
     }
   }
   return rutas;

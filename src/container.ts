@@ -3,6 +3,7 @@ import type { Dependencias } from './application/contexto.js';
 import { ServicioAutenticacion } from './application/autenticacion.js';
 import { ServicioCatalogos } from './application/catalogos.js';
 import { ServicioCaracterizacion } from './application/caracterizacion.js';
+import { ServicioCruces } from './application/cruces.js';
 import { ServicioDocumentos } from './application/documentos.js';
 import { ServicioRadicacion } from './application/radicacion.js';
 import { ServicioConsulta } from './application/consulta.js';
@@ -36,6 +37,7 @@ export interface Servicios {
   validacion: ServicioValidacion;
   requisitos: ServicioRequisitos;
   subsanacion: ServicioSubsanacion;
+  cruces: ServicioCruces;
 }
 
 export function crearDependencias(env: Env): Dependencias {
@@ -51,6 +53,7 @@ export function crearDependencias(env: Env): Dependencias {
 export function crearServicios(deps: Dependencias): Servicios {
   const correos = new ServicioCorreos(deps);
   const documentos = new ServicioDocumentos(deps);
+  const cruces = new ServicioCruces(deps);
   return {
     autenticacion: new ServicioAutenticacion(deps),
     usuarios: new ServicioUsuarios(deps, correos),
@@ -64,8 +67,9 @@ export function crearServicios(deps: Dependencias): Servicios {
     caracterizacion: new ServicioCaracterizacion(deps),
     documentos,
     radicacion: new ServicioRadicacion(deps, correos, documentos),
-    validacion: new ServicioValidacion(deps, correos, documentos),
+    validacion: new ServicioValidacion(deps, correos, documentos, cruces),
     requisitos: new ServicioRequisitos(deps),
     subsanacion: new ServicioSubsanacion(deps, correos),
+    cruces,
   };
 }

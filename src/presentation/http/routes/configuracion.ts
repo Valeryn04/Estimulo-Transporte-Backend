@@ -230,6 +230,11 @@ export function rutasConfiguracion(s: Servicios): Router {
     res.json(await s.requisitos.cambiarActivo(req.actor!, idParam(req), false, contexto(req)));
   });
 
+  /** Cruces con archivo que se pueden asociar a un requisito. */
+  r.get('/requisitos/cruces', requisitos, async (_req, res) => {
+    res.json({ items: await s.cruces.opciones() });
+  });
+
   r.get('/requisitos/:id/versiones', requisitos, async (req, res) => {
     res.json({ items: await s.requisitos.versiones(idParam(req)) });
   });

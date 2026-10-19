@@ -1,3 +1,4 @@
+import { ServicioCruces } from './cruces.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import {
@@ -71,6 +72,7 @@ export class ServicioValidacion {
     private readonly deps: Dependencias,
     private readonly correos: ServicioCorreos,
     private readonly documentos: ServicioDocumentos,
+    private readonly cruces: ServicioCruces,
   ) {
     this.cipher = new DataCipher(deps.env.encryption);
   }
@@ -335,6 +337,12 @@ export class ServicioValidacion {
         puedeVer: verSensibles && x.archivo !== null,
       })),
       items: items.map((i) => this.itemVista(i)),
+      // RF-VAL-03: coincidencias de la persona y su cuidador en los archivos de cruce de la lista de chequeo.
+      alertas: await this.cruces.alertas(
+        pool,
+        items.flatMap((i) => (i.cruceCodigo ? [i.cruceCodigo] : [])),
+        { pcd: base.pcd.numero, cuidador: base.cuidador.numero },
+      ),
       decisiones: decisiones.map((x) => ({
         id: x.id,
         ronda: x.ronda,
