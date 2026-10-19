@@ -11,6 +11,7 @@ import {
   type ErrorCampo,
 } from '../domain/caracterizacion.js';
 import { ESTADOS } from '../domain/estados.js';
+import { modoDeEdicion, vistaSubsanacion } from './subsanacion.js';
 import { normalizarNombre } from '../domain/identificacion.js';
 import { memoriaPublica } from '../infrastructure/cache.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
@@ -73,7 +74,7 @@ export class ServicioCaracterizacion {
       solicitud: {
         vigencia: ctx.anio,
         estado: { codigo: ctx.estado, nombre: d.nombre },
-        editable: ctx.estado === 'CORREO_VERIFICADO',
+        editable: (await modoDeEdicion(pool, solicitudId, ctx.estado)).modo !== 'NINGUNO',
         explicacion: d.explicacion,
         siguientePaso: d.siguientePaso,
         radicado: ctx.radicado,
@@ -92,6 +93,7 @@ export class ServicioCaracterizacion {
         nombreEditable: !ctx.cuidadorEnOtrasSolicitudes,
       },
       datos,
+      subsanacion: await vistaSubsanacion(pool, solicitudId),
       avance: calcularAvance(datos),
       version: guardada?.version ?? 0,
       guardadoAt: guardada?.updatedAt.toISOString() ?? null,
@@ -144,11 +146,29 @@ export class ServicioCaracterizacion {
       }
       const solicitud = await caracterizacionRepo.contexto(tx, solicitudId);
       if (!solicitud) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
-      if (solicitud.estado !== 'CORREO_VERIFICADO') {
+      const edicion = await modoDeEdicion(tx, solicitudId, solicitud.estado);
+      if (edicion.modo === 'NINGUNO') {
         throw conflict(
           'SOLICITUD_NO_EDITABLE',
           'La solicitud ya no admite cambios desde este formulario.',
         );
+      }
+      if (edicion.modo === 'SUBSANACION') {
+        // Con una subsanación vigente solo se modifica lo que el validador señaló (RF-CAR-06).
+        const noPermitidos = [
+          ...CAMPOS.filter((c) => c in cambios && !edicion.campos.has(c)),
+          ...(['pcdNombre', 'cuidadorNombre'] as const).filter(
+            (c) => c in cambios && cambios[c] !== undefined,
+          ),
+        ];
+        if (noPermitidos.length > 0) {
+          throw errorValidacion(
+            noPermitidos.map((c) => ({
+              campo: c,
+              mensaje: 'Solo puede modificar lo que se le pidió corregir.',
+            })),
+          );
+        }
       }
       const guardada = await caracterizacionRepo.obtener(tx, solicitudId, this.cipher);
       const versionActual = guardada?.version ?? 0;

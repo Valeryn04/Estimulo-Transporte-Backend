@@ -4,6 +4,7 @@ import type { Servicios } from '../../../container.js';
 import { autenticarInterno, requierePermisos } from '../middlewares/auth.js';
 import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { rutasConfiguracion } from './configuracion.js';
+import { rutasValidacion } from './validacion.js';
 
 const rolIdSchema = z
   .number({ error: 'Rol: elija un rol de la lista' })
@@ -22,7 +23,7 @@ const rolSchema = z.object({
     .min(3, 'Descripción: escriba al menos 3 caracteres')
     .max(250, 'Descripción: máximo 250 caracteres'),
   permisos: z
-    .array(z.string().regex(/^[a-z_]+\.[a-z_]+$/, 'Permisos: permiso inválido'), {
+    .array(z.string().regex(/^[a-z_]+(\.[a-z_]+)+$/, 'Permisos: permiso inválido'), {
       error: 'Permisos: envíe la lista de permisos',
     })
     .max(100)
@@ -180,6 +181,7 @@ export function rutasAdmin(s: Servicios): Router {
     },
   );
 
+  r.use('/validacion', rutasValidacion(s));
   r.use(rutasConfiguracion(s));
 
   return r;

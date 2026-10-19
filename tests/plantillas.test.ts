@@ -93,6 +93,10 @@ describe('plantillas de correo configurables (RF-COM-02, RNF-12)', () => {
         'PASSWORD_RESTABLECIDA',
         'PREINSCRIPCION_EXITOSA',
         'PREINSCRIPCION_VERIFICACION',
+        'SUBSANACION_RECIBIDA',
+        'VALIDACION_APROBADA',
+        'VALIDACION_RECHAZADA',
+        'VALIDACION_SUBSANACION',
       ]);
       expect(lista.every((p) => p.version === 1)).toBe(true);
     });

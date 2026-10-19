@@ -279,10 +279,14 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'enlace_seguro_dias',
         'login_bloqueo_minutos',
         'login_max_intentos',
+        'max_rondas_subsanacion',
         'otp_vigencia_minutos',
+        'plazo_recursos_dias',
+        'plazo_subsanacion_dias',
         'reenvio_verificacion_minutos',
         'sesion_inactividad_minutos',
         'sesion_maxima_horas',
+        'tiempo_max_atencion_dias',
         'verificacion_correo_horas',
       ]);
       expect(por('archivo_max_mb')?.vigente.valor).toBe('5');
@@ -292,12 +296,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect(por('otp_vigencia_minutos')).toMatchObject({ minimo: 5, maximo: 15 });
       expect(por('sesion_maxima_horas')).toMatchObject({ minimo: 1, maximo: 12 });
       // Los parámetros de funciones que aún no existen no se muestran ni se pueden cambiar.
-      for (const clave of [
-        'plazo_subsanacion_dias',
-        'max_rondas_subsanacion',
-        'plazo_descargos_dias',
-        'meta_beneficiarios',
-      ]) {
+      for (const clave of ['plazo_descargos_dias', 'meta_beneficiarios']) {
         expect(por(clave), clave).toBeUndefined();
         const r = await post(`/parametros/${clave}/versiones`, {
           valor: '5',

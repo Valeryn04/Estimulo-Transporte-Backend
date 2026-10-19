@@ -1,4 +1,12 @@
-export type EstadoSolicitud = 'PREINSCRITA' | 'CORREO_VERIFICADO' | 'RADICADA';
+export type EstadoSolicitud =
+  | 'PREINSCRITA'
+  | 'CORREO_VERIFICADO'
+  | 'RADICADA'
+  | 'EN_REVISION'
+  | 'EN_SUBSANACION'
+  | 'SUBSANADA'
+  | 'VALIDADA'
+  | 'NO_CUMPLE';
 
 export interface DescripcionEstado {
   etapa: string;
@@ -37,6 +45,45 @@ export const ESTADOS: Record<EstadoSolicitud, DescripcionEstado> = {
     siguientePaso:
       'Espere la verificación de requisitos. Le avisaremos por este correo cuando haya novedades; no necesita hacer nada más por ahora.',
   },
+  EN_REVISION: {
+    etapa: 'Validación',
+    nombre: 'En revisión',
+    explicacion:
+      'Un funcionario está verificando, requisito por requisito, los datos y documentos de su solicitud.',
+    siguientePaso:
+      'Espere el resultado. Le avisaremos por este correo; si necesitamos que corrija algo, se lo indicaremos con un plazo.',
+  },
+  EN_SUBSANACION: {
+    etapa: 'Validación',
+    nombre: 'Por subsanar',
+    explicacion:
+      'Al revisar su solicitud encontramos datos o documentos que debe corregir o completar. Solo puede modificar lo que le indicamos.',
+    siguientePaso:
+      'Ingrese al enlace que le enviamos por correo, corrija lo señalado y envíe su respuesta dentro del plazo.',
+  },
+  SUBSANADA: {
+    etapa: 'Validación',
+    nombre: 'Subsanada',
+    explicacion: 'Recibimos sus correcciones. Su solicitud volvió a revisión.',
+    siguientePaso:
+      'Espere el resultado de la nueva revisión; no necesita hacer nada más por ahora.',
+  },
+  VALIDADA: {
+    etapa: 'Validación',
+    nombre: 'Validada',
+    explicacion:
+      'Su solicitud cumplió los requisitos. Continúa con la priorización y la asignación, que dependen de los cupos y del presupuesto.',
+    siguientePaso:
+      'Espere. Haber cumplido los requisitos no garantiza el beneficio: le avisaremos si resulta asignado.',
+  },
+  NO_CUMPLE: {
+    etapa: 'Validación',
+    nombre: 'No cumple los requisitos',
+    explicacion:
+      'Su solicitud no cumplió los requisitos del programa. La decisión y su motivación se la enviamos por correo, con los recursos que proceden.',
+    siguientePaso:
+      'Si no está de acuerdo, puede interponer el recurso que le indicamos en el correo dentro del plazo señalado.',
+  },
 };
 
 /** Cómo se muestra al ciudadano el estado de entrega de un correo (RNF-13). */
@@ -53,4 +100,8 @@ export const NOMBRE_COMUNICACION: Record<string, string> = {
   PREINSCRIPCION_VERIFICACION: 'Verificación del correo',
   PREINSCRIPCION_EXITOSA: 'Preinscripción exitosa',
   CARACTERIZACION_RADICADA: 'Solicitud radicada',
+  VALIDACION_APROBADA: 'Validación aprobada',
+  VALIDACION_SUBSANACION: 'Solicitud de subsanación',
+  VALIDACION_RECHAZADA: 'Validación rechazada',
+  SUBSANACION_RECIBIDA: 'Subsanación recibida',
 };

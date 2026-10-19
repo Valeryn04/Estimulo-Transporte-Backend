@@ -382,6 +382,21 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
     },
   );
 
+  /** Lo que se le pidió corregir al ciudadano (observación del validador y plazo), si hay una subsanación. */
+  r.get('/caracterizacion/subsanacion', autenticarCiudadano(tokens), async (req, res) => {
+    res.json({ subsanacion: await s.subsanacion.obtener(req.solicitudId as number) });
+  });
+
+  /** El ciudadano envía sus correcciones: el caso vuelve a la bandeja de validación (RF-CAR-06). */
+  r.post(
+    '/caracterizacion/subsanacion/responder',
+    limites.documentos,
+    autenticarCiudadano(tokens),
+    async (req, res) => {
+      res.json(await s.subsanacion.responder(req.solicitudId as number, { ip: req.ip ?? null }));
+    },
+  );
+
   /** Qué falta para poder enviar la solicitud: datos obligatorios y documentos. */
   r.get('/caracterizacion/revision', autenticarCiudadano(tokens), async (req, res) => {
     res.json(await s.radicacion.pendientes(req.solicitudId as number));

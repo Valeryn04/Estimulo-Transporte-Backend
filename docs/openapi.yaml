@@ -1458,6 +1458,278 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409': { $ref: '#/components/responses/ReglaDeNegocio' }
         '422': { $ref: '#/components/responses/Validacion' }
+
+  /publico/caracterizacion/subsanacion:
+    get:
+      tags: [Portal ciudadano]
+      summary: Lo que se le pidió corregir (RF-CAR-06)
+      description: 'Devuelve la observación del validador por cada requisito, el plazo y qué documentos y datos puede modificar. Vacío si no hay subsanación.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Subsanación vigente o la última
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subsanacion: { $ref: '#/components/schemas/Subsanacion' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+  /publico/caracterizacion/subsanacion/responder:
+    post:
+      tags: [Portal ciudadano]
+      summary: Enviar las correcciones (RF-CAR-06)
+      description: 'Cada documento señalado debe tener un archivo nuevo. El caso vuelve a la bandeja de validación marcado como «subsanado».'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200': { description: Correcciones recibidas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '409':
+          {
+            description: Sin subsanación pendiente (SIN_SUBSANACION) o plazo vencido (SUBSANACION_VENCIDA),
+          }
+        '422': { $ref: '#/components/responses/Validacion' }
+
+  /admin/validacion/bandeja:
+    get:
+      tags: [Validación]
+      summary: Bandeja de trabajo de validación (RF-VAL-01)
+      description: 'Casos pendientes con radicado, fecha, nombre, estado y días transcurridos. Resalta (superaTiempo) los que pasan el tiempo máximo de atención.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - {
+            name: estado,
+            in: query,
+            schema: { type: string, enum: [RADICADA, SUBSANADA, EN_REVISION, EN_SUBSANACION] },
+          }
+        - {
+            name: asignado,
+            in: query,
+            schema: { type: string },
+            description: 'mios, sin o el id de un validador',
+          }
+        - { name: q, in: query, schema: { type: string }, description: Radicado o nombre }
+        - { name: vencidas, in: query, schema: { type: boolean } }
+        - {
+            name: orden,
+            in: query,
+            schema: { type: string, enum: [radicado, fecha, nombre, estado, dias] },
+          }
+        - { name: direccion, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { name: pagina, in: query, schema: { type: integer, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        '200': { description: Casos de la bandeja }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/validacion/validadores:
+    get:
+      tags: [Validación]
+      summary: Validadores a quienes se puede asignar un caso
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Lista de validadores activos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/validacion/asignar:
+    post:
+      tags: [Validación]
+      summary: Asignar o reasignar casos entre validadores (RF-VAL-01)
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [solicitudIds, validadorId]
+              properties:
+                solicitudIds: { type: array, items: { type: integer } }
+                validadorId:
+                  { type: integer, nullable: true, description: 'null deja el caso sin asignar' }
+      responses:
+        '200': { description: Casos asignados }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/validacion/casos/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Validación]
+      summary: Caso con sus datos, documentos, lista de chequeo y decisiones
+      description: 'Los datos sensibles solo los ve quien tiene permiso sobre datos sensibles; para los demás salen ocultos.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Caso }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/validacion/casos/{id}/tomar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Validación]
+      summary: Tomar el caso para revisarlo (queda «en revisión»)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Caso abierto }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/validacion/casos/{id}/liberar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Validación]
+      summary: Devolver el caso a la bandeja sin decidir
+      security: [{ bearerInterno: [] }]
+      responses:
+        '204': { description: Caso liberado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/validacion/casos/{id}/items/{itemId}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: itemId, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Validación]
+      summary: Registrar el resultado de un requisito (RF-VAL-02)
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resultado]
+              properties:
+                resultado: { type: string, enum: [CUMPLE, NO_CUMPLE, PENDIENTE, NO_APLICA] }
+                fuente: { type: string }
+                observacion: { type: string }
+                evidencia: { type: string }
+      responses:
+        '200': { description: Requisito actualizado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/validacion/casos/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Validación]
+      summary: Aprobar, pedir subsanación o rechazar (RF-VAL-02, RF-VAL-05)
+      description: 'No se aprueba con requisitos «no cumple» o «pendientes» ni se rechaza sin motivación. Notifica a la persona por correo.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APROBAR, SUBSANAR, RECHAZAR] }
+                motivacion: { type: string }
+      responses:
+        '201': { description: Decisión registrada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/validacion/casos/{id}/documentos/{documentoId}/archivo:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: documentoId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Validación]
+      summary: Descargar un documento del caso (queda en la bitácora)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /admin/requisitos:
+    get:
+      tags: [Requisitos]
+      summary: Lista de chequeo de requisitos (RN-05)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Requisitos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Requisitos]
+      summary: Crear un requisito
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequisitoEntrada' }
+      responses:
+        '201': { description: Requisito creado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/requisitos/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Requisitos]
+      summary: Modificar un requisito (queda versionado)
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequisitoEntrada' }
+      responses:
+        '200': { description: Requisito modificado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/requisitos/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Requisitos]
+      summary: Activar un requisito
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Requisito activo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/requisitos/{id}/desactivar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Requisitos]
+      summary: Desactivar un requisito (nunca se borra)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Requisito inactivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/requisitos/{id}/versiones:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Requisitos]
+      summary: Historial de versiones de un requisito
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Versiones }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+
 components:
   securitySchemes:
     bearerCiudadano:
@@ -1656,6 +1928,36 @@ components:
             formato: { type: string, enum: [pdf, docx, odt] }
             tamanoBytes: { type: integer }
             cargadoAt: { type: string, format: date-time }
+    Subsanacion:
+      type: object
+      nullable: true
+      properties:
+        estado: { type: string, enum: [ABIERTA, VENCIDA, RESPONDIDA] }
+        venceAt: { type: string, format: date-time }
+        respondidaAt: { type: string, format: date-time, nullable: true }
+        puedeResponder: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              nombre: { type: string }
+              observacion: { type: string }
+              documentoId: { type: integer, nullable: true }
+              campos: { type: array, items: { type: string } }
+        documentosEditables: { type: array, items: { type: integer } }
+        camposEditables: { type: array, items: { type: string } }
+    RequisitoEntrada:
+      type: object
+      required: [nombre, aplicaA]
+      properties:
+        nombre: { type: string }
+        descripcion: { type: string }
+        aplicaA: { type: string, enum: [PCD, CUIDADOR, COMUN] }
+        fuenteSugerida: { type: string }
+        documentoId: { type: integer, nullable: true }
+        campos: { type: array, items: { type: string } }
+        cruceCodigo: { type: string, nullable: true }
     DocumentoEntrada:
       type: object
       required: [nombre, aplicaA, obligatorio]

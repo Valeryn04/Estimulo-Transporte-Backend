@@ -147,6 +147,15 @@ export const caracterizacionRepo = {
     };
   },
 
+  /** Cuándo se guardó por última vez la caracterización (null si todavía no hay registro). */
+  async ultimaActualizacion(db: Queryable, solicitudId: number): Promise<Date | null> {
+    const r = await db.query<{ updated_at: Date }>(
+      `SELECT updated_at FROM caracterizaciones WHERE solicitud_id = $1`,
+      [solicitudId],
+    );
+    return r.rows[0]?.updated_at ?? null;
+  },
+
   async obtener(
     db: Queryable,
     solicitudId: number,

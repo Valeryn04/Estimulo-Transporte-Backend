@@ -32,6 +32,24 @@ const documentoSchema = z.object({
   obligatorio: z.boolean({ error: 'Obligatorio: indique si es obligatorio' }),
 });
 
+const requisitoSchema = z.object({
+  nombre: nombre('Nombre', 3),
+  descripcion: z.string().trim().max(500, 'Descripción: máximo 500 caracteres').default(''),
+  aplicaA: z.enum(['PCD', 'CUIDADOR', 'COMUN'], { error: 'Aplica a: elija una opción' }),
+  fuenteSugerida: z.string().trim().max(200, 'Fuente sugerida: máximo 200 caracteres').default(''),
+  documentoId: z.number().int().positive().nullable().default(null),
+  campos: z
+    .array(z.string().regex(/^[A-Za-z]+$/, 'Datos: nombre inválido'))
+    .max(40)
+    .default([])
+    .transform((c) => [...new Set(c)]),
+  cruceCodigo: z
+    .string()
+    .regex(/^[A-Z_]{3,60}$/)
+    .nullable()
+    .default(null),
+});
+
 const filtroItemsSchema = paginacionSchema.extend({
   q: z.string().trim().max(100).optional(),
   activo: z.enum(['true', 'false']).optional(),
@@ -186,6 +204,34 @@ export function rutasConfiguracion(s: Servicios): Router {
 
   r.get('/documentos-requeridos/:id/versiones', catalogos, async (req, res) => {
     res.json({ items: await s.catalogos.versionesDocumento(idParam(req)) });
+  });
+
+  // ---- lista de chequeo de requisitos (RN-05, RF-ADM-04)
+  const requisitos = requierePermisos('requisitos.administrar');
+  r.get('/requisitos', requisitos, async (_req, res) => {
+    res.json({ items: await s.requisitos.listar() });
+  });
+
+  r.post('/requisitos', requisitos, async (req, res) => {
+    const d = requisitoSchema.parse(req.body);
+    res.status(201).json(await s.requisitos.crear(req.actor!, d, contexto(req)));
+  });
+
+  r.put('/requisitos/:id', requisitos, async (req, res) => {
+    const d = requisitoSchema.parse(req.body);
+    res.json(await s.requisitos.actualizar(req.actor!, idParam(req), d, contexto(req)));
+  });
+
+  r.post('/requisitos/:id/activar', requisitos, async (req, res) => {
+    res.json(await s.requisitos.cambiarActivo(req.actor!, idParam(req), true, contexto(req)));
+  });
+
+  r.post('/requisitos/:id/desactivar', requisitos, async (req, res) => {
+    res.json(await s.requisitos.cambiarActivo(req.actor!, idParam(req), false, contexto(req)));
+  });
+
+  r.get('/requisitos/:id/versiones', requisitos, async (req, res) => {
+    res.json({ items: await s.requisitos.versiones(idParam(req)) });
   });
 
   // ---- parámetros versionados

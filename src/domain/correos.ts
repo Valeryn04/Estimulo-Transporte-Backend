@@ -10,7 +10,11 @@ export type TipoCorreo =
   | 'CARACTERIZACION_RADICADA'
   | 'CODIGO_CONSULTA'
   | 'CUENTA_CREADA'
-  | 'PASSWORD_RESTABLECIDA';
+  | 'PASSWORD_RESTABLECIDA'
+  | 'VALIDACION_APROBADA'
+  | 'VALIDACION_SUBSANACION'
+  | 'VALIDACION_RECHAZADA'
+  | 'SUBSANACION_RECIBIDA';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {
@@ -29,6 +33,9 @@ export interface DatosCorreo {
   minutosVigencia?: number;
   fechaLimite?: string;
   itemsSubsanar?: string;
+  /** Motivación de una decisión de validación. */
+  motivacion?: string;
+  plazoRecursosDias?: number;
   /** Usuario de ingreso al portal interno. */
   usuario?: string;
   enlaceAcceso?: string;
@@ -75,6 +82,14 @@ export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }>
   horas_vigencia: { descripcion: 'Horas de vigencia del enlace de verificación', ejemplo: '72' },
   codigo: { descripcion: 'Código de un solo uso para consultar el estado', ejemplo: '482915' },
   minutos_vigencia: { descripcion: 'Minutos de vigencia del código', ejemplo: '10' },
+  motivacion: {
+    descripcion: 'Motivación de la decisión del validador',
+    ejemplo: 'No se acreditó la afiliación al régimen subsidiado.',
+  },
+  plazo_recursos_dias: {
+    descripcion: 'Días para interponer recursos contra una decisión',
+    ejemplo: '10',
+  },
   nombre_funcionario: { descripcion: 'Nombre del funcionario', ejemplo: 'Carlos Gómez' },
   usuario: { descripcion: 'Usuario para ingresar al portal interno', ejemplo: 'cgomez' },
   contrasena_temporal: {
@@ -113,6 +128,8 @@ export function valoresDeCorreo(d: DatosCorreo): Record<string, string> {
     minutos_vigencia: d.minutosVigencia,
     fecha_limite: d.fechaLimite,
     items_subsanar: d.itemsSubsanar,
+    motivacion: d.motivacion,
+    plazo_recursos_dias: d.plazoRecursosDias,
     nombre_funcionario: d.nombre,
     usuario: d.usuario,
     enlace_acceso: d.enlaceAcceso,

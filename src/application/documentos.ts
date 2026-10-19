@@ -1,3 +1,4 @@
+import { modoDeEdicion } from './subsanacion.js';
 import { ARCHIVO_MAX_MB_ABSOLUTO } from '../domain/limites.js';
 import { createHash } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
@@ -119,13 +120,21 @@ export class ServicioDocumentos {
       modelosRepo.idsConModelo(pool),
       this.reglas(),
     ]);
+    const edicion = await modoDeEdicion(pool, solicitudId, ctx.estado);
     const porDoc = new Map(vigentes.map((a) => [a.documentoId, a]));
     const documentos = exigidos.map((d) =>
       this.entrada(d, porDoc.get(d.id), reemplazos.get(d.id) ?? 0, conModelo.has(d.id)),
     );
     const obligatorios = documentos.filter((d) => d.obligatorio);
     return {
-      editable: ctx.estado === 'CORREO_VERIFICADO',
+      editable: edicion.modo !== 'NINGUNO',
+      // Con una subsanación vigente solo se cargan los documentos señalados.
+      documentosEditables:
+        edicion.modo === 'SUBSANACION'
+          ? [...edicion.documentos]
+          : edicion.modo === 'TODO'
+            ? null
+            : [],
       reglas: { formatos: reglas.formatos, maxMb: reglas.maxMb },
       documentos,
       resumen: {
@@ -189,10 +198,17 @@ export class ServicioDocumentos {
     const { pool } = this.deps;
     const solicitud = await caracterizacionRepo.contexto(pool, solicitudId);
     if (!solicitud) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
-    if (solicitud.estado !== 'CORREO_VERIFICADO') {
+    const edicionPrevia = await modoDeEdicion(pool, solicitudId, solicitud.estado);
+    if (edicionPrevia.modo === 'NINGUNO') {
       throw conflict(
         'SOLICITUD_NO_EDITABLE',
         'La solicitud ya no admite cambios desde este formulario.',
+      );
+    }
+    if (edicionPrevia.modo === 'SUBSANACION' && !edicionPrevia.documentos.has(documentoId)) {
+      throw conflict(
+        'DOCUMENTO_NO_SENALADO',
+        'Solo puede cargar los documentos que se le pidió corregir.',
       );
     }
     const documento = await documentosSolicitudRepo.exigidoPorId(pool, documentoId);
@@ -215,10 +231,17 @@ export class ServicioDocumentos {
         throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
       }
       const actual = await caracterizacionRepo.contexto(tx, solicitudId);
-      if (actual?.estado !== 'CORREO_VERIFICADO') {
+      const edicion = actual ? await modoDeEdicion(tx, solicitudId, actual.estado) : null;
+      if (!edicion || edicion.modo === 'NINGUNO') {
         throw conflict(
           'SOLICITUD_NO_EDITABLE',
           'La solicitud ya no admite cambios desde este formulario.',
+        );
+      }
+      if (edicion.modo === 'SUBSANACION' && !edicion.documentos.has(documentoId)) {
+        throw conflict(
+          'DOCUMENTO_NO_SENALADO',
+          'Solo puede cargar los documentos que se le pidió corregir.',
         );
       }
       const r = await documentosSolicitudRepo.reemplazar(tx, {

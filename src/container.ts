@@ -10,7 +10,10 @@ import { ServicioCorreos } from './application/correos.js';
 import { ServicioParametros } from './application/parametros.js';
 import { ServicioPlantillas } from './application/plantillas.js';
 import { ServicioPreinscripcion } from './application/preinscripcion.js';
+import { ServicioRequisitos } from './application/requisitos.js';
 import { ServicioRoles } from './application/roles.js';
+import { ServicioSubsanacion } from './application/subsanacion.js';
+import { ServicioValidacion } from './application/validacion.js';
 import { ServicioUsuarios } from './application/usuarios.js';
 import { createPool } from './infrastructure/db/pool.js';
 import { SmtpMailer } from './infrastructure/mail/mailer.js';
@@ -30,6 +33,9 @@ export interface Servicios {
   caracterizacion: ServicioCaracterizacion;
   documentos: ServicioDocumentos;
   radicacion: ServicioRadicacion;
+  validacion: ServicioValidacion;
+  requisitos: ServicioRequisitos;
+  subsanacion: ServicioSubsanacion;
 }
 
 export function crearDependencias(env: Env): Dependencias {
@@ -58,5 +64,8 @@ export function crearServicios(deps: Dependencias): Servicios {
     caracterizacion: new ServicioCaracterizacion(deps),
     documentos,
     radicacion: new ServicioRadicacion(deps, correos, documentos),
+    validacion: new ServicioValidacion(deps, correos, documentos),
+    requisitos: new ServicioRequisitos(deps),
+    subsanacion: new ServicioSubsanacion(deps, correos),
   };
 }
