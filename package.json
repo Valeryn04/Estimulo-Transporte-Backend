@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "dev:smtp": "tsx scripts/dev-smtp.ts",
+    "demo:datos": "tsx scripts/datos-demo.ts",
     "respaldo": "tsx scripts/respaldo.ts",
     "restaurar": "tsx scripts/restaurar.ts",
     "verificar:documentos": "tsx scripts/verificar-documentos.ts",
