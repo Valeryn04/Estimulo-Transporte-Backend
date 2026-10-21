@@ -32,6 +32,8 @@ export interface ConfigSmtp {
   user: string;
   pass: string;
   from: string;
+  /** Nombre con el que se valida el certificado TLS si no es el del host. La validación nunca se desactiva. */
+  tlsServername?: string;
 }
 
 /** Envío real por SMTP (el institucional de la Alcaldía o un proveedor transaccional). */
@@ -44,6 +46,7 @@ export class SmtpMailer implements Mailer {
       port: config.port,
       secure: config.secure,
       auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+      ...(config.tlsServername ? { tls: { servername: config.tlsServername } } : {}),
       connectionTimeout: 10_000,
       socketTimeout: 20_000,
     });

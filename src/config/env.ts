@@ -24,6 +24,8 @@ const schema = z.object({
     .transform((v) => v === 'true'),
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
+  // Nombre con el que se valida el certificado TLS cuando difiere del host (Brevo: smtp-relay.sendinblue.com).
+  SMTP_TLS_SERVERNAME: z.string().default(''),
   MAIL_FROM: z.string().min(3),
   // Secreto compartido con el proveedor de correo para reportar entregas y rebotes (RNF-13).
   MAIL_WEBHOOK_SECRET: z.string().min(16),
@@ -52,7 +54,14 @@ export interface Env {
   encryption: EncryptionKeys;
   storageDir: string;
   dbPoolMax: number;
-  smtp: { host: string; port: number; secure: boolean; user: string; pass: string };
+  smtp: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    pass: string;
+    tlsServername: string;
+  };
   mailFrom: string;
   mailWebhookSecret: string;
   trustProxy: number;
@@ -123,6 +132,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       secure: e.SMTP_SECURE,
       user: e.SMTP_USER,
       pass: e.SMTP_PASS,
+      tlsServername: e.SMTP_TLS_SERVERNAME,
     },
     mailFrom: e.MAIL_FROM,
     mailWebhookSecret: e.MAIL_WEBHOOK_SECRET,
