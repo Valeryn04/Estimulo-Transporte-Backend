@@ -3,6 +3,7 @@ import type { Dependencias } from './application/contexto.js';
 import { ServicioAsignacion } from './application/asignacion.js';
 import { ServicioEntregas } from './application/entregas.js';
 import { ServicioEncuestas } from './application/encuestas.js';
+import { ServicioSeguimiento } from './application/seguimiento.js';
 import { ServicioNovedades } from './application/novedades.js';
 import { ServicioAutenticacion } from './application/autenticacion.js';
 import { ServicioCatalogos } from './application/catalogos.js';
@@ -50,6 +51,7 @@ export interface Servicios {
   entregas: ServicioEntregas;
   novedades: ServicioNovedades;
   encuestas: ServicioEncuestas;
+  seguimiento: ServicioSeguimiento;
 }
 
 export function crearDependencias(env: Env): Dependencias {
@@ -69,6 +71,7 @@ export function crearServicios(deps: Dependencias): Servicios {
   const priorizacion = new ServicioPriorizacion(deps, documentos);
   const asignacion = new ServicioAsignacion(deps, correos, documentos);
   const novedades = new ServicioNovedades(deps, correos, documentos, asignacion, cruces);
+  const encuestas = new ServicioEncuestas(deps, correos);
   // Cada archivo de cruce cargado se compara con los beneficios vigentes (RF-NOV-03).
   cruces.alCargar = (estructura, cargaId, actorId) =>
     novedades.evaluarCarga(estructura, cargaId, actorId);
@@ -94,6 +97,7 @@ export function crearServicios(deps: Dependencias): Servicios {
     asignacion,
     entregas: new ServicioEntregas(deps, correos, documentos),
     novedades,
-    encuestas: new ServicioEncuestas(deps, correos),
+    encuestas,
+    seguimiento: new ServicioSeguimiento(deps, encuestas),
   };
 }

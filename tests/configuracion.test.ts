@@ -286,6 +286,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'login_bloqueo_minutos',
         'login_max_intentos',
         'max_rondas_subsanacion',
+        'meta_beneficiarios',
         'otp_vigencia_minutos',
         'plazo_decision_dias',
         'plazo_descargos_dias',
@@ -303,15 +304,8 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect(por('archivo_max_mb')).toMatchObject({ minimo: 1, maximo: 10 });
       expect(por('otp_vigencia_minutos')).toMatchObject({ minimo: 5, maximo: 15 });
       expect(por('sesion_maxima_horas')).toMatchObject({ minimo: 1, maximo: 12 });
-      // Los parámetros de funciones que aún no existen no se muestran ni se pueden cambiar.
-      for (const clave of ['meta_beneficiarios']) {
-        expect(por(clave), clave).toBeUndefined();
-        const r = await post(`/parametros/${clave}/versiones`, {
-          valor: '5',
-          justificacion: 'no debería poder',
-        });
-        expect(r.status, clave).toBe(404);
-      }
+      // La meta del programa alimenta el avance del tablero.
+      expect(por('meta_beneficiarios')?.vigente.valor).toBe('3000');
     });
 
     it('el tamaño máximo por documento no puede pasar de 10 MB', async () => {

@@ -35,6 +35,7 @@ tags:
   - name: Texto de autorización
   - name: Plantillas de correo
 
+  - name: Seguimiento
 paths:
   /health:
     get:
@@ -2731,6 +2732,153 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409': { $ref: '#/components/responses/ReglaDeNegocio' }
         '422': { $ref: '#/components/responses/Validacion' }
+  /admin/bitacora:
+    get:
+      tags: [Seguimiento]
+      summary: Consultar la bitácora de auditoría (RF-SEG-01)
+      description: 'Filtros por radicado, usuario, módulo, acción y rango de fechas. Los valores anterior y nuevo solo los ven quienes tienen permiso sobre datos sensibles. Cada consulta queda registrada.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: radicado, in: query, schema: { type: string } }
+      - { name: usuario, in: query, schema: { type: string } }
+      - { name: modulo, in: query, schema: { type: string } }
+      - { name: accion, in: query, schema: { type: string } }
+      - { name: desde, in: query, schema: { type: string, format: date } }
+      - { name: hasta, in: query, schema: { type: string, format: date } }
+      - { name: pagina, in: query, schema: { type: integer } }
+      - { name: tamano, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Página de eventos de bitácora }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/bitacora/modulos:
+    get:
+      tags: [Seguimiento]
+      summary: Módulos que aparecen en la bitácora
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Lista de módulos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/expedientes:
+    get:
+      tags: [Seguimiento]
+      summary: Buscar expedientes por radicado, documento o nombre (RF-SEG-03)
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: q, in: query, required: true, schema: { type: string, minLength: 3 } }
+      responses:
+        '200': { description: Coincidencias }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/expedientes/{solicitudId}:
+    parameters:
+      - { name: solicitudId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Seguimiento]
+      summary: Expediente integral con la cronología del caso
+      description: 'Estados, documentos, decisiones, puntaje, asignación, entrega, novedades, comunicaciones y otras vigencias en una sola vista. Sin permiso sobre datos sensibles se enmascaran los documentos de identidad y se omite el correo. Cada consulta queda registrada.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Expediente }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/tablero:
+    get:
+      tags: [Seguimiento]
+      summary: Tablero de control del programa (RF-SEG-04)
+      description: 'Embudo de etapas, novedades, avance contra la meta, ejecución presupuestal, tiempos promedio por etapa y satisfacción. Filtros por vigencia, localidad, población y etapa (estados separados por coma).'
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: vigenciaId, in: query, schema: { type: integer } }
+      - { name: localidadId, in: query, schema: { type: integer } }
+      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+      - { name: etapa, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Indicadores }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/reportes:
+    get:
+      tags: [Seguimiento]
+      summary: Catálogo de reportes (RF-SEG-05)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Reportes disponibles }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/reportes/exportaciones:
+    get:
+      tags: [Seguimiento]
+      summary: Historial de exportaciones (RF-SEG-06)
+      description: 'Quién exportó, qué reporte, con qué filtros, cuántas filas y la huella SHA-256 del archivo.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Últimas exportaciones }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/reportes/{codigo}:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Seguimiento]
+      summary: Vista previa de un reporte
+      description: 'Filtros comunes: vigencia, rango de fechas, localidad, estado y tipo de población. Devuelve hasta 200 filas y el total.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: vigenciaId, in: query, schema: { type: integer } }
+      - { name: desde, in: query, schema: { type: string, format: date } }
+      - { name: hasta, in: query, schema: { type: string, format: date } }
+      - { name: localidadId, in: query, schema: { type: integer } }
+      - { name: estado, in: query, schema: { type: string } }
+      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+      responses:
+        '200': { description: Tabla del reporte }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/reportes/{codigo}/exportar:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Seguimiento]
+      summary: Exportar un reporte a Excel o PDF
+      description: 'El archivo lleva los filtros en el encabezado y todas las filas. La exportación queda registrada en el historial y en la bitácora.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: formato, in: query, required: true, schema: { type: string, enum: [XLSX, PDF] } }
+      - { name: vigenciaId, in: query, schema: { type: integer } }
+      - { name: desde, in: query, schema: { type: string, format: date } }
+      - { name: hasta, in: query, schema: { type: string, format: date } }
+      - { name: localidadId, in: query, schema: { type: integer } }
+      - { name: estado, in: query, schema: { type: string } }
+      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/bi/eventos:
+    get:
+      tags: [Seguimiento]
+      summary: Eventos para tableros de Business Intelligence (RF-SEG-07)
+      description: 'Eventos de la bitácora sin datos personales: el caso se identifica con una referencia irreversible. Paginación incremental con despuesDe. Formato json o csv.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+      - { name: desde, in: query, schema: { type: string, format: date } }
+      - { name: hasta, in: query, schema: { type: string, format: date } }
+      - { name: despuesDe, in: query, schema: { type: integer } }
+      - { name: limite, in: query, schema: { type: integer } }
+      - { name: formato, in: query, schema: { type: string, enum: [json, csv] } }
+      responses:
+        '200': { description: Eventos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
 
 components:
   securitySchemes:
@@ -2752,6 +2900,7 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+
     EncuestaEntrada:
       type: object
       required: [titulo, desde, hasta, preguntas]

@@ -36,6 +36,7 @@ function rutasDelCodigo(): Set<string> {
     { archivo: 'src/presentation/http/routes/asignacion.ts', prefijo: '/admin/asignacion' },
     { archivo: 'src/presentation/http/routes/novedades.ts', prefijo: '/admin/novedades' },
     { archivo: 'src/presentation/http/routes/encuestas.ts', prefijo: '/admin/encuestas' },
+    { archivo: 'src/presentation/http/routes/seguimiento.ts', prefijo: '/admin' },
     { archivo: 'src/presentation/http/app.ts', prefijo: '' },
   ];
   const rutas = new Set<string>();
