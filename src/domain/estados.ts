@@ -189,4 +189,5 @@ export const NOMBRE_COMUNICACION: Record<string, string> = {
   NOVEDAD_BENEFICIO: 'Novedad del beneficio',
   REVOCATORIA_TRASLADO: 'Traslado de la revocatoria',
   REVOCATORIA_DECISION: 'Decisión de la revocatoria',
+  ENCUESTA_INVITACION: 'Invitación a la encuesta de satisfacción',
 };

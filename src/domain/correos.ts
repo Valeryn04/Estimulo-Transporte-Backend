@@ -21,7 +21,8 @@ export type TipoCorreo =
   | 'BENEFICIO_ACTIVADO'
   | 'NOVEDAD_BENEFICIO'
   | 'REVOCATORIA_TRASLADO'
-  | 'REVOCATORIA_DECISION';
+  | 'REVOCATORIA_DECISION'
+  | 'ENCUESTA_INVITACION';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {
@@ -60,6 +61,8 @@ export interface DatosCorreo {
   observacion?: string;
   traslado?: string;
   resultado?: string;
+  tituloEncuesta?: string;
+  enlaceEncuesta?: string;
   /** Usuario de ingreso al portal interno. */
   usuario?: string;
   enlaceAcceso?: string;
@@ -158,6 +161,14 @@ export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }>
     ejemplo: 'El reporte del operador indica que la tarjeta no se usa desde hace cuatro meses.',
   },
   resultado: { descripcion: 'Resultado de la decisión', ejemplo: 'Beneficio revocado' },
+  titulo_encuesta: {
+    descripcion: 'Título de la encuesta de satisfacción',
+    ejemplo: 'Satisfacción con el servicio',
+  },
+  enlace_encuesta: {
+    descripcion: 'Enlace personal para responder la encuesta (una sola vez)',
+    ejemplo: 'https://estimulo.barranquilla.gov.co/encuesta?token=ejemplo',
+  },
   nombre_funcionario: { descripcion: 'Nombre del funcionario', ejemplo: 'Carlos Gómez' },
   usuario: { descripcion: 'Usuario para ingresar al portal interno', ejemplo: 'cgomez' },
   contrasena_temporal: {
@@ -209,6 +220,8 @@ export function valoresDeCorreo(d: DatosCorreo): Record<string, string> {
     observacion: d.observacion,
     traslado: d.traslado,
     resultado: d.resultado,
+    titulo_encuesta: d.tituloEncuesta,
+    enlace_encuesta: d.enlaceEncuesta,
     tipo_transporte: d.tipoTransporte,
     recomendaciones_uso: d.recomendacionesUso,
     causales_revocatoria: d.causalesRevocatoria,

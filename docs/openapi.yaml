@@ -2608,6 +2608,129 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409': { $ref: '#/components/responses/ReglaDeNegocio' }
         '422': { $ref: '#/components/responses/Validacion' }
+  /admin/encuestas:
+    get:
+      tags: [Encuestas]
+      summary: Encuestas de satisfacción (RF-NOV-04)
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Encuestas con invitadas y respondidas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Encuestas]
+      summary: Crear una encuesta en borrador
+      description: 'Preguntas de selección (de 2 a 12 opciones), escala (de 1 a un máximo entre 3 y 10) o texto libre, con vigencia por fechas.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EncuestaEntrada' }
+      responses:
+        '201': { description: Encuesta creada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/encuestas/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Encuestas]
+      summary: Una encuesta con sus preguntas
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Encuesta }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Encuestas]
+      summary: Modificar una encuesta en borrador
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EncuestaEntrada' }
+      responses:
+        '200': { description: Encuesta modificada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/encuestas/{id}/publicar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Encuestas]
+      summary: Publicar la encuesta e invitar por correo a los beneficiarios activos
+      description: 'Cada beneficiario recibe un enlace personal de un solo uso. Una encuesta publicada no cambia sus preguntas.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Encuesta publicada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/encuestas/{id}/cerrar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Encuestas]
+      summary: Cerrar la encuesta
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Encuesta cerrada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/encuestas/{id}/resultados:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Encuestas]
+      summary: Resultados anonimizados
+      description: 'Conteos, promedios, textos sin identificar, tasa de respuesta e indicador de satisfacción (0 a 100). Las respuestas no referencian al beneficiario.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Resultados }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /publico/encuesta:
+    get:
+      tags: [Portal ciudadano]
+      summary: Encuesta de satisfacción para responder, con el enlace personal
+      parameters:
+        - { name: token, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Título, descripción y preguntas }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /publico/encuesta/responder:
+    post:
+      tags: [Portal ciudadano]
+      summary: Responder la encuesta (una sola vez por beneficiario)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, respuestas]
+              properties:
+                token: { type: string }
+                respuestas: { type: object, description: 'Mapa idPregunta → valor (número en escala, texto de la opción o texto libre)' }
+      responses:
+        '201': { description: Respuesta registrada }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
 
 components:
   securitySchemes:
@@ -2629,6 +2752,25 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+    EncuestaEntrada:
+      type: object
+      required: [titulo, desde, hasta, preguntas]
+      properties:
+        titulo: { type: string }
+        descripcion: { type: string }
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date }
+        preguntas:
+          type: array
+          items:
+            type: object
+            required: [tipo, texto]
+            properties:
+              tipo: { type: string, enum: [SELECCION, ESCALA, TEXTO] }
+              texto: { type: string }
+              obligatoria: { type: boolean }
+              opciones: { type: array, items: { type: string }, nullable: true }
+              escalaMax: { type: integer, nullable: true }
     EntregaDatos:
       type: object
       required: [rol, tarjetaId, tipoTransporteId, fechaEntrega, receptorTipo, funcionarioEntrega]

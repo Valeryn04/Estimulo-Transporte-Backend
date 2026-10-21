@@ -6,6 +6,7 @@ import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { rutasConfiguracion } from './configuracion.js';
 import { rutasCruces } from './cruces.js';
 import { rutasAsignacion } from './asignacion.js';
+import { rutasEncuestas } from './encuestas.js';
 import { rutasNovedades } from './novedades.js';
 import { rutasMatriz } from './matriz.js';
 import { rutasPriorizacion } from './priorizacion.js';
@@ -192,6 +193,7 @@ export function rutasAdmin(s: Servicios): Router {
   r.use('/priorizacion', rutasPriorizacion(s));
   r.use('/asignacion', rutasAsignacion(s));
   r.use('/novedades', rutasNovedades(s));
+  r.use('/encuestas', rutasEncuestas(s));
 
   // ---- avisos internos: cada persona ve los dirigidos a los permisos de su rol
   r.get('/alertas', async (req, res) => {

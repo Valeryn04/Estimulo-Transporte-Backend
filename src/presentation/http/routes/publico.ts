@@ -313,6 +313,24 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
     res.json(await s.consulta.consultar(req.solicitudId as number));
   });
 
+  // ---- encuesta de satisfacción (RF-NOV-04): con el enlace personal que llega por correo
+
+  r.get('/encuesta', limites.acceso, async (req, res) => {
+    const { token } = z.object({ token: z.string().min(20).max(200) }).parse(req.query);
+    res.json(await s.encuestas.paraResponder(token));
+  });
+
+  r.post('/encuesta/responder', limites.acceso, async (req, res) => {
+    const d = z
+      .object({
+        token: z.string().min(20).max(200),
+        respuestas: z.record(z.string(), z.union([z.string().max(1000), z.number()])),
+      })
+      .parse(req.body);
+    await s.encuestas.responder(d.token, d.respuestas, { ip: req.ip ?? null });
+    res.status(201).json({ mensaje: 'Gracias por responder la encuesta.' });
+  });
+
   // ---- caracterización: solo con la sesión que da el código o el enlace seguro
 
   r.get('/caracterizacion', autenticarCiudadano(tokens), async (req, res) => {
