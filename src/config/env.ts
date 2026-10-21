@@ -31,6 +31,9 @@ const schema = z.object({
   INTERNAL_ALLOWED_IPS: z.string().default(''),
   COOKIE_SECURE: z.enum(['true', 'false']).optional(),
   API_DOCS: z.enum(['true', 'false']).optional(),
+  // Cloudflare Turnstile: con ambas llaves se exige la verificación en los formularios públicos y el inicio de sesión.
+  TURNSTILE_SITE_KEY: z.string().default(''),
+  TURNSTILE_SECRET: z.string().default(''),
 });
 
 export interface EncryptionKeys {
@@ -59,6 +62,8 @@ export interface Env {
   cookieSecure: boolean;
   /** Publica la documentación OpenAPI en /api/docs. Por defecto, solo fuera de producción. */
   apiDocs: boolean;
+  /** Llaves de Cloudflare Turnstile; null = verificación desactivada. */
+  turnstile: { siteKey: string; secret: string } | null;
 }
 
 /** Interpreta "v1:base64,v2:base64": la primera llave es la activa. */
@@ -97,6 +102,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     );
   }
   return {
+    turnstile:
+      e.TURNSTILE_SITE_KEY && e.TURNSTILE_SECRET
+        ? { siteKey: e.TURNSTILE_SITE_KEY, secret: e.TURNSTILE_SECRET }
+        : null,
     apiDocs: e.API_DOCS ? e.API_DOCS === 'true' : e.NODE_ENV !== 'production',
     cookieSecure,
     nodeEnv: e.NODE_ENV,

@@ -297,7 +297,7 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
       base({ rol: 'CUIDADOR', tarjetaId: 'TM00007777' }),
     );
     expect(mas.status).toBe(409);
-    expect(mas.body.error.codigo).toBe('BENEFICIO_NO_PENDIENTE');
+    expect(mas.body.error.codigo).toBe('ENTREGA_YA_REGISTRADA');
     // La persona ve en su consulta en qué va su beneficio.
     const estado = await request(e.app).get(`${pub}/consulta/solicitud`).set(bearer(casoA.token));
     expect(estado.body.estado.nombre).toBe('Entregada, en activación');

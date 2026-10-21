@@ -1,8 +1,10 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import type { Servicios } from '../../../container.js';
 import { REPORTES } from '../../../infrastructure/repositories/reportes.js';
 import { requiereAlguno, requierePermisos } from '../middlewares/auth.js';
+import { errorValidacion } from '../../../application/esquemas.js';
+import { archivoDe, recibirArchivo } from '../subida.js';
 import { contexto, idParam } from '../utilidades.js';
 
 const fecha = (campo: string) => z.iso.date({ error: `${campo}: use el formato AAAA-MM-DD` });
@@ -18,6 +20,33 @@ const bitacoraSchema = z.object({
   pagina: z.coerce.number().int().min(1).default(1),
   tamano: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+const correoSchema = z.object({
+  correo: z.email('Correo: escriba un correo válido, por ejemplo nombre@correo.com').max(150),
+  justificacion: z
+    .string({ error: 'Justificación: escríbala' })
+    .trim()
+    .max(1000, 'Justificación: máximo 1000 caracteres'),
+});
+
+/** Lee el campo «datos» (JSON) de una petición multipart. */
+function datosDe<T>(req: Request, esquema: z.ZodType<T>): T {
+  let crudo: unknown;
+  try {
+    crudo = JSON.parse(String((req.body as Record<string, unknown>)?.datos ?? ''));
+  } catch {
+    throw errorValidacion([
+      { campo: 'datos', mensaje: 'Datos: envíe la información en el campo «datos»' },
+    ]);
+  }
+  const r = esquema.safeParse(crudo);
+  if (!r.success) {
+    throw errorValidacion(
+      r.error.issues.map((i) => ({ campo: String(i.path[0] ?? 'datos'), mensaje: i.message })),
+    );
+  }
+  return r.data;
+}
 
 const tableroSchema = z.object({
   vigenciaId: entero.optional(),
@@ -75,18 +104,67 @@ export function rutasSeguimiento(s: Servicios): Router {
     });
   });
 
+  r.get('/bitacora/exportar', requierePermisos('bitacora.ver'), async (req, res) => {
+    const { formato, ...q } = bitacoraSchema
+      .omit({ pagina: true, tamano: true })
+      .extend({ formato: z.enum(['XLSX', 'PDF'], { error: 'Formato: XLSX o PDF' }) })
+      .parse(req.query);
+    const a = await s.seguimiento.exportarBitacora(req.actor!, q, formato, contexto(req));
+    res
+      .type(a.tipo)
+      .set('Content-Disposition', `attachment; filename="${a.nombre}"`)
+      .set('Cache-Control', 'no-store')
+      .send(a.archivo);
+  });
+
   r.get('/bitacora/modulos', requierePermisos('bitacora.ver'), async (_req, res) => {
     res.json({ items: await s.seguimiento.modulosBitacora() });
   });
 
   r.get('/expedientes', requierePermisos('expediente.ver'), async (req, res) => {
-    const q = z.object({ q: z.string().trim().min(3, 'Escriba al menos 3 caracteres').max(100) }).parse(req.query);
+    const q = z
+      .object({ q: z.string().trim().min(3, 'Escriba al menos 3 caracteres').max(100) })
+      .parse(req.query);
     res.json({ items: await s.seguimiento.buscarExpedientes(q.q) });
   });
 
   r.get('/expedientes/:solicitudId', requierePermisos('expediente.ver'), async (req, res) => {
-    res.json(await s.seguimiento.expediente(req.actor!, idParam(req, 'solicitudId'), contexto(req)));
+    res.json(
+      await s.seguimiento.expediente(req.actor!, idParam(req, 'solicitudId'), contexto(req)),
+    );
   });
+
+  const gestionarCorreo = requierePermisos('novedades.gestionar');
+
+  /** Corrige el correo de la persona con su soporte y reenvía las comunicaciones rebotadas (RF-COM-03). */
+  r.post('/expedientes/:solicitudId/correo', gestionarCorreo, recibirArchivo, async (req, res) => {
+    const d = datosDe(req, correoSchema);
+    res
+      .status(201)
+      .json(
+        await s.seguimiento.actualizarCorreo(
+          req.actor!,
+          idParam(req, 'solicitudId'),
+          d,
+          archivoDe(req),
+          contexto(req),
+        ),
+      );
+  });
+
+  r.post(
+    '/expedientes/:solicitudId/comunicaciones/:correoId/reenviar',
+    gestionarCorreo,
+    async (req, res) => {
+      await s.seguimiento.reenviarComunicacion(
+        req.actor!,
+        idParam(req, 'solicitudId'),
+        idParam(req, 'correoId'),
+        contexto(req),
+      );
+      res.status(202).json({ mensaje: 'La comunicación quedó en la cola de envío.' });
+    },
+  );
 
   r.get('/tablero', requierePermisos('tablero.ver'), async (req, res) => {
     res.json(await s.seguimiento.tablero(tableroSchema.parse(req.query)));
@@ -102,14 +180,24 @@ export function rutasSeguimiento(s: Servicios): Router {
 
   r.get('/reportes/:codigo', requierePermisos('reportes.ver'), async (req, res) => {
     const codigo = codigoSchema.parse(req.params.codigo);
-    res.json(await s.seguimiento.vistaPrevia(req.actor!, codigo as never, reporteSchema.parse(req.query)));
+    res.json(
+      await s.seguimiento.vistaPrevia(req.actor!, codigo as never, reporteSchema.parse(req.query)),
+    );
   });
 
   r.get('/reportes/:codigo/exportar', requierePermisos('reportes.exportar'), async (req, res) => {
     const codigo = codigoSchema.parse(req.params.codigo);
-    const { formato } = z.object({ formato: z.enum(['XLSX', 'PDF'], { error: 'Formato: XLSX o PDF' }) }).parse(req.query);
+    const { formato } = z
+      .object({ formato: z.enum(['XLSX', 'PDF'], { error: 'Formato: XLSX o PDF' }) })
+      .parse(req.query);
     const filtros = reporteSchema.parse(req.query);
-    const a = await s.seguimiento.exportar(req.actor!, codigo as never, formato, filtros, contexto(req));
+    const a = await s.seguimiento.exportar(
+      req.actor!,
+      codigo as never,
+      formato,
+      filtros,
+      contexto(req),
+    );
     res
       .type(a.tipo)
       .set('Content-Disposition', `attachment; filename="${a.nombre}"`)
@@ -121,7 +209,10 @@ export function rutasSeguimiento(s: Servicios): Router {
     const { formato, ...f } = biSchema.parse(req.query);
     if (formato === 'csv') {
       const csv = await s.seguimiento.eventosBiCsv(req.actor!, f, contexto(req));
-      res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="eventos-bi.csv"').send(csv);
+      res
+        .type('text/csv; charset=utf-8')
+        .set('Content-Disposition', 'attachment; filename="eventos-bi.csv"')
+        .send(csv);
       return;
     }
     res.json(await s.seguimiento.eventosBi(req.actor!, f, contexto(req)));

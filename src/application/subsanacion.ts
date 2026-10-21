@@ -8,6 +8,7 @@ import { documentosSolicitudRepo } from '../infrastructure/repositories/document
 import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
 import { tokensRepo } from '../infrastructure/repositories/solicitudes.js';
 import { validacionRepo, type ItemSubsanacion } from '../infrastructure/repositories/validacion.js';
+import { textoItemsSubsanar } from '../domain/validacion.js';
 import { conflict, notFound } from '../shared/errors.js';
 import type { ContextoPeticion, Dependencias } from './contexto.js';
 import type { ServicioCorreos } from './correos.js';
@@ -89,6 +90,132 @@ export class ServicioSubsanacion {
     private readonly deps: Dependencias,
     private readonly correos: ServicioCorreos,
   ) {}
+
+  /**
+   * Tarea periódica sobre los plazos de subsanación: avisa a la persona unos días antes del vencimiento (RF-COM-01) y,
+   * pasado el plazo sin respuesta, la solicitud pasa a «no cumple por vencimiento de término» y se le notifica (RN-12).
+   */
+  async revisarPlazos(): Promise<{ recordatorios: number; vencidas: number }> {
+    const { pool } = this.deps;
+    const dias = await parametrosRepo.entero(pool, 'subsanacion_recordatorio_dias');
+    const plazoRecursos = await parametrosRepo.entero(pool, 'plazo_recursos_dias');
+    let recordatorios = 0;
+    let vencidas = 0;
+
+    const porAvisar = await pool.query<{ id: string }>(
+      `SELECT sub.id FROM subsanaciones sub JOIN solicitudes s ON s.id = sub.solicitud_id
+        WHERE sub.estado = 'ABIERTA' AND s.estado = 'EN_SUBSANACION' AND sub.recordatorio_at IS NULL
+          AND sub.vence_at > now() AND sub.vence_at <= now() + make_interval(days => $1)`,
+      [dias],
+    );
+    for (const { id } of porAvisar.rows) {
+      const hecho = await withTransaction(pool, async (tx) => {
+        const r = await tx.query<{
+          solicitud_id: number;
+          items: ItemSubsanacion[];
+          vence_at: Date;
+          radicado: string;
+          correo: string;
+          nombre: string;
+        }>(
+          `SELECT sub.solicitud_id, sub.items, sub.vence_at, s.radicado, s.correo, p.nombre_completo AS nombre
+             FROM subsanaciones sub JOIN solicitudes s ON s.id = sub.solicitud_id
+             JOIN personas p ON p.id = s.pcd_id
+            WHERE sub.id = $1 AND sub.estado = 'ABIERTA' AND sub.recordatorio_at IS NULL AND s.estado = 'EN_SUBSANACION'
+            FOR UPDATE OF sub SKIP LOCKED`,
+          [id],
+        );
+        const f = r.rows[0];
+        if (!f) return false;
+        const enlaceConsulta = await this.correos.enlaceConsulta(tx, f.solicitud_id, dias + 1);
+        const token = new URL(enlaceConsulta).searchParams.get('token');
+        await this.correos.encolar(tx, {
+          solicitudId: f.solicitud_id,
+          tipo: 'RECORDATORIO_SUBSANACION',
+          destinatario: f.correo,
+          datos: {
+            nombre: f.nombre,
+            radicado: f.radicado,
+            itemsSubsanar: textoItemsSubsanar(f.items),
+            fechaLimite: FECHA_LARGA.format(f.vence_at),
+            enlaceCaracterizacion: `${this.deps.env.frontendUrl}/caracterizacion?token=${token}`,
+            enlaceConsulta,
+          },
+        });
+        await tx.query(`UPDATE subsanaciones SET recordatorio_at = now() WHERE id = $1`, [id]);
+        await bitacoraRepo.registrar(tx, {
+          usuarioId: null,
+          modulo: MODULO.VALIDACION,
+          accion: ACCION.SUBSANACION_RECORDATORIO,
+          entidad: 'subsanacion',
+          entidadId: id,
+          solicitudId: f.solicitud_id,
+          detalle: { venceAt: f.vence_at.toISOString() },
+        });
+        return true;
+      });
+      if (hecho) recordatorios++;
+    }
+
+    const vencidasIds = await pool.query<{ id: string }>(
+      `SELECT sub.id FROM subsanaciones sub JOIN solicitudes s ON s.id = sub.solicitud_id
+        WHERE sub.estado = 'ABIERTA' AND s.estado = 'EN_SUBSANACION' AND sub.vence_at < now()`,
+    );
+    for (const { id } of vencidasIds.rows) {
+      const hecho = await withTransaction(pool, async (tx) => {
+        const r = await tx.query<{
+          solicitud_id: number;
+          vence_at: Date;
+          radicado: string;
+          correo: string;
+          nombre: string;
+        }>(
+          `SELECT sub.solicitud_id, sub.vence_at, s.radicado, s.correo, p.nombre_completo AS nombre
+             FROM subsanaciones sub JOIN solicitudes s ON s.id = sub.solicitud_id
+             JOIN personas p ON p.id = s.pcd_id
+            WHERE sub.id = $1 AND sub.estado = 'ABIERTA' AND s.estado = 'EN_SUBSANACION' AND sub.vence_at < now()
+            FOR UPDATE OF s SKIP LOCKED`,
+          [id],
+        );
+        const f = r.rows[0];
+        if (!f) return false;
+        await validacionRepo.fijarEstado(tx, f.solicitud_id, 'NO_CUMPLE');
+        await this.correos.encolar(tx, {
+          solicitudId: f.solicitud_id,
+          tipo: 'SUBSANACION_VENCIDA',
+          destinatario: f.correo,
+          datos: {
+            nombre: f.nombre,
+            radicado: f.radicado,
+            fechaLimite: FECHA_LARGA.format(f.vence_at),
+            plazoRecursosDias: plazoRecursos,
+            enlaceConsulta: await this.correos.enlaceConsulta(
+              tx,
+              f.solicitud_id,
+              plazoRecursos + 1,
+            ),
+          },
+        });
+        await bitacoraRepo.registrar(tx, {
+          usuarioId: null,
+          modulo: MODULO.VALIDACION,
+          accion: ACCION.SUBSANACION_VENCIDA,
+          entidad: 'solicitud',
+          entidadId: f.solicitud_id,
+          solicitudId: f.solicitud_id,
+          valorAnterior: { estado: 'EN_SUBSANACION' },
+          valorNuevo: { estado: 'NO_CUMPLE' },
+          justificacion:
+            'No cumple por vencimiento de término: venció el plazo de subsanación sin respuesta.',
+          detalle: { subsanacionId: Number(id), venceAt: f.vence_at.toISOString() },
+        });
+        return true;
+      });
+      if (hecho) vencidas++;
+    }
+    if (recordatorios + vencidas > 0) this.correos.despachar();
+    return { recordatorios, vencidas };
+  }
 
   /** La subsanación vigente (o la última) con la observación del validador y el plazo. */
   obtener(solicitudId: number) {

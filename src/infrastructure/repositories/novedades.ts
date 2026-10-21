@@ -2,7 +2,7 @@ import type { Queryable } from '../db/pool.js';
 import type { EstadoBeneficio } from './asignacion.js';
 import type { EvidenciaGuardada } from './priorizacion.js';
 
-export type TipoNovedad = 'BLOQUEO' | 'SUSPENSION' | 'LEVANTAMIENTO';
+export type TipoNovedad = 'BLOQUEO' | 'SUSPENSION' | 'LEVANTAMIENTO' | 'FINALIZACION';
 
 export interface Novedad {
   id: number;
@@ -26,7 +26,7 @@ const SELECT_NOVEDAD = `SELECT n.id, n.beneficio_id, n.tipo, c.nombre AS causal,
        n.observacion, n.evidencia_nombre, n.evidencia_tamano, u.usuario AS responsable, n.correo_id,
        to_char(n.levantamiento_programado, 'YYYY-MM-DD') AS levantamiento_programado, n.levanta_novedad_id,
        n.estado_previo, n.created_at,
-       (n.tipo <> 'LEVANTAMIENTO' AND NOT EXISTS (SELECT 1 FROM novedades l WHERE l.levanta_novedad_id = n.id)) AS abierta
+       (n.tipo IN ('BLOQUEO', 'SUSPENSION') AND NOT EXISTS (SELECT 1 FROM novedades l WHERE l.levanta_novedad_id = n.id)) AS abierta
   FROM novedades n
   LEFT JOIN catalogo_items c ON c.id = n.causal_id
   JOIN usuarios u ON u.id = n.responsable_id`;
@@ -162,7 +162,7 @@ export const novedadesRepo = {
          FROM novedades n
          JOIN beneficios b ON b.id = n.beneficio_id
          JOIN solicitudes s ON s.id = b.solicitud_id
-        WHERE n.tipo <> 'LEVANTAMIENTO' AND n.levantamiento_programado IS NOT NULL
+        WHERE n.tipo IN ('BLOQUEO', 'SUSPENSION') AND n.levantamiento_programado IS NOT NULL
           AND n.levantamiento_programado <= hoy_bogota()
           AND NOT EXISTS (SELECT 1 FROM novedades l WHERE l.levanta_novedad_id = n.id)`,
     );
@@ -432,15 +432,16 @@ export const revocatoriasRepo = {
       fecha: string;
       referencia?: string | null;
       evidencia?: EvidenciaGuardada | null;
-      usuarioId: number;
+      /** Null cuando los descargos los presenta la persona desde el portal. */
+      usuarioId: number | null;
       correoId?: number | null;
     },
   ): Promise<number> {
     const r = await db.query<{ id: string }>(
       `INSERT INTO revocatoria_eventos (revocatoria_id, etapa, texto, fecha, referencia, evidencia_ruta,
                                         evidencia_nombre, evidencia_mime, evidencia_tamano, evidencia_sha256,
-                                        usuario_id, correo_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+                                        usuario_id, correo_id, origen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
       [
         e.revocatoriaId,
         e.etapa,
@@ -454,6 +455,7 @@ export const revocatoriasRepo = {
         e.evidencia?.sha256 ?? null,
         e.usuarioId,
         e.correoId ?? null,
+        e.usuarioId === null ? 'CIUDADANO' : 'FUNCIONARIO',
       ],
     );
     return Number((r.rows[0] as { id: string }).id);
@@ -473,8 +475,8 @@ export const revocatoriasRepo = {
       created_at: Date;
     }>(
       `SELECT e.id, e.etapa, e.texto, to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.referencia, e.evidencia_nombre,
-              e.evidencia_tamano, u.usuario, e.correo_id, e.created_at
-         FROM revocatoria_eventos e JOIN usuarios u ON u.id = e.usuario_id
+              e.evidencia_tamano, COALESCE(u.usuario, 'Persona beneficiaria') AS usuario, e.correo_id, e.created_at
+         FROM revocatoria_eventos e LEFT JOIN usuarios u ON u.id = e.usuario_id
         WHERE e.revocatoria_id = $1 ORDER BY e.created_at, e.id`,
       [revocatoriaId],
     );
@@ -546,6 +548,16 @@ export const revocatoriasRepo = {
   },
 
   /** Revocatorias en curso con el momento desde el que corre el plazo para decidir. */
+  /** La revocatoria sin decidir de una solicitud, si la hay. */
+  async abiertaDeSolicitud(db: Queryable, solicitudId: number): Promise<Revocatoria | null> {
+    const r = await db.query<{ id: string }>(
+      `SELECT r.id FROM revocatorias r JOIN beneficios b ON b.id = r.beneficio_id
+        WHERE b.solicitud_id = $1 AND r.estado <> 'DECIDIDA' ORDER BY r.id DESC LIMIT 1`,
+      [solicitudId],
+    );
+    return r.rows[0] ? this.porId(db, Number(r.rows[0].id)) : null;
+  },
+
   async enCurso(db: Queryable): Promise<
     {
       id: number;

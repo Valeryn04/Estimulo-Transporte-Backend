@@ -35,7 +35,10 @@ export interface FilaBitacora {
 const escaparLike = (t: string): string => t.replace(/[\\%_]/g, '\\$&');
 
 export const bitacoraConsultaRepo = {
-  async consultar(db: Queryable, f: FiltroBitacora): Promise<{ items: FilaBitacora[]; total: number }> {
+  async consultar(
+    db: Queryable,
+    f: FiltroBitacora,
+  ): Promise<{ items: FilaBitacora[]; total: number }> {
     const params: unknown[] = [];
     const donde: string[] = ['true'];
     const agregar = (sql: string, valor: unknown) => {
@@ -47,8 +50,10 @@ export const bitacoraConsultaRepo = {
     if (f.usuario) agregar(`u.usuario ILIKE ?`, `%${escaparLike(f.usuario)}%`);
     if (f.modulo) agregar('b.modulo = ?', f.modulo);
     if (f.accion) agregar('b.accion ILIKE ?', `${escaparLike(f.accion)}%`);
-    if (f.desde) agregar(`b.creado_at >= (?::date)::timestamp AT TIME ZONE 'America/Bogota'`, f.desde);
-    if (f.hasta) agregar(`b.creado_at < ((?::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`, f.hasta);
+    if (f.desde)
+      agregar(`b.creado_at >= (?::date)::timestamp AT TIME ZONE 'America/Bogota'`, f.desde);
+    if (f.hasta)
+      agregar(`b.creado_at < ((?::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`, f.hasta);
     params.push(f.limit, f.offset);
     const r = await db.query<{
       id: string;
@@ -97,7 +102,9 @@ export const bitacoraConsultaRepo = {
   },
 
   async modulos(db: Queryable): Promise<string[]> {
-    const r = await db.query<{ modulo: string }>(`SELECT DISTINCT modulo FROM bitacora ORDER BY modulo`);
+    const r = await db.query<{ modulo: string }>(
+      `SELECT DISTINCT modulo FROM bitacora ORDER BY modulo`,
+    );
     return r.rows.map((x) => x.modulo);
   },
 };
@@ -128,10 +135,24 @@ export const expedienteRepo = {
     db: Queryable,
     q: string,
     limit: number,
-  ): Promise<{ solicitudId: number; radicado: string | null; estado: string; anio: number; pcdNombre: string }[]> {
+  ): Promise<
+    {
+      solicitudId: number;
+      radicado: string | null;
+      estado: string;
+      anio: number;
+      pcdNombre: string;
+    }[]
+  > {
     const texto = q.trim();
     const numero = texto.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const r = await db.query<{ id: number; radicado: string | null; estado: string; anio: number; nombre: string }>(
+    const r = await db.query<{
+      id: number;
+      radicado: string | null;
+      estado: string;
+      anio: number;
+      nombre: string;
+    }>(
       `SELECT s.id, s.radicado, s.estado, v.anio, p.nombre_completo AS nombre
          FROM solicitudes s
          JOIN personas p ON p.id = s.pcd_id
@@ -140,7 +161,13 @@ export const expedienteRepo = {
         ORDER BY v.anio DESC, s.id DESC LIMIT $4`,
       [texto.toUpperCase(), numero, `%${escaparLike(texto)}%`, limit],
     );
-    return r.rows.map((x) => ({ solicitudId: x.id, radicado: x.radicado, estado: x.estado, anio: x.anio, pcdNombre: x.nombre }));
+    return r.rows.map((x) => ({
+      solicitudId: x.id,
+      radicado: x.radicado,
+      estado: x.estado,
+      anio: x.anio,
+      pcdNombre: x.nombre,
+    }));
   },
 
   async resumen(db: Queryable, solicitudId: number): Promise<ResumenExpediente | null> {
@@ -209,9 +236,18 @@ export const expedienteRepo = {
       cuidador:
         f.cui_id === null
           ? null
-          : { id: f.cui_id, nombre: f.cui_nombre as string, tipo: f.cui_tipo as string, numero: f.cui_numero as string },
-      puntaje: f.puntaje === null ? null : { total: Number(f.puntaje), matrizVersion: f.matriz as number },
-      beneficio: f.ben_id === null ? null : { id: Number(f.ben_id), estado: f.ben_estado as string, asignadoAt: f.ben_at as Date },
+          : {
+              id: f.cui_id,
+              nombre: f.cui_nombre as string,
+              tipo: f.cui_tipo as string,
+              numero: f.cui_numero as string,
+            },
+      puntaje:
+        f.puntaje === null ? null : { total: Number(f.puntaje), matrizVersion: f.matriz as number },
+      beneficio:
+        f.ben_id === null
+          ? null
+          : { id: Number(f.ben_id), estado: f.ben_estado as string, asignadoAt: f.ben_at as Date },
     };
   },
 
@@ -222,7 +258,12 @@ export const expedienteRepo = {
         WHERE s.pcd_id = $1 AND s.id <> $2 ORDER BY v.anio DESC`,
       [personaId, excluirId],
     );
-    return r.rows.map((x) => ({ solicitudId: x.id, radicado: x.radicado, estado: x.estado, anio: x.anio }));
+    return r.rows.map((x) => ({
+      solicitudId: x.id,
+      radicado: x.radicado,
+      estado: x.estado,
+      anio: x.anio,
+    }));
   },
 
   async eventosDeBitacora(db: Queryable, solicitudId: number) {
@@ -257,21 +298,188 @@ export const expedienteRepo = {
   },
 
   async comunicaciones(db: Queryable, solicitudId: number) {
-    const r = await db.query<{ id: string; tipo: string; asunto: string; estado: string; created_at: Date; enviado_at: Date | null }>(
-      `SELECT id, tipo, asunto, estado, created_at, enviado_at FROM correos WHERE solicitud_id = $1 ORDER BY created_at, id`,
+    const r = await db.query<{
+      id: string;
+      tipo: string;
+      asunto: string;
+      cuerpo: string;
+      destinatario: string;
+      estado: string;
+      created_at: Date;
+      enviado_at: Date | null;
+      entregado_at: Date | null;
+      rebote_motivo: string | null;
+      reenvio_de: string | null;
+      reenviado: boolean;
+    }>(
+      `SELECT c.id, c.tipo, c.asunto, c.cuerpo, c.destinatario, c.estado, c.created_at, c.enviado_at, c.entregado_at,
+              c.rebote_motivo, c.reenvio_de,
+              EXISTS (SELECT 1 FROM correos r WHERE r.reenvio_de = c.id) AS reenviado
+         FROM correos c WHERE c.solicitud_id = $1 ORDER BY c.created_at, c.id`,
       [solicitudId],
     );
     return r.rows.map((x) => ({
       id: Number(x.id),
       tipo: x.tipo,
       asunto: x.asunto,
+      cuerpo: x.cuerpo,
+      destinatario: x.destinatario,
       estado: x.estado,
       fecha: x.enviado_at ?? x.created_at,
+      entregadoAt: x.entregado_at,
+      reboteMotivo: x.rebote_motivo,
+      reenvioDe: x.reenvio_de === null ? null : Number(x.reenvio_de),
+      reenviado: x.reenviado,
     }));
   },
 
+  async decisiones(db: Queryable, solicitudId: number) {
+    const r = await db.query<{
+      ronda: number;
+      decision: string;
+      motivacion: string;
+      items: { nombre: string; resultado: string; observacion: string }[];
+      decidido_at: Date;
+      usuario: string;
+    }>(
+      `SELECT d.ronda, d.decision, d.motivacion, d.items, d.decidido_at, u.usuario
+         FROM validacion_decisiones d JOIN usuarios u ON u.id = d.decidido_por
+        WHERE d.solicitud_id = $1 ORDER BY d.id`,
+      [solicitudId],
+    );
+    return r.rows.map((x) => ({
+      ronda: x.ronda,
+      decision: x.decision,
+      motivacion: x.motivacion,
+      listaDeChequeo: x.items.map((i) => ({
+        requisito: i.nombre,
+        resultado: i.resultado,
+        observacion: i.observacion,
+      })),
+      fecha: x.decidido_at,
+      usuario: x.usuario,
+    }));
+  },
+
+  async novedades(db: Queryable, solicitudId: number) {
+    const r = await db.query<{
+      tipo: string;
+      causal: string | null;
+      fecha_efectiva: string;
+      observacion: string;
+      responsable: string;
+    }>(
+      `SELECT n.tipo, c.nombre AS causal, to_char(n.fecha_efectiva, 'YYYY-MM-DD') AS fecha_efectiva, n.observacion,
+              u.usuario AS responsable
+         FROM novedades n JOIN beneficios b ON b.id = n.beneficio_id
+         JOIN usuarios u ON u.id = n.responsable_id
+         LEFT JOIN catalogo_items c ON c.id = n.causal_id
+        WHERE b.solicitud_id = $1 ORDER BY n.id`,
+      [solicitudId],
+    );
+    return r.rows.map((x) => ({
+      tipo: x.tipo,
+      causal: x.causal,
+      fechaEfectiva: x.fecha_efectiva,
+      observacion: x.observacion,
+      responsable: x.responsable,
+    }));
+  },
+
+  async entregas(db: Queryable, solicitudId: number) {
+    const r = await db.query<{
+      rol: string;
+      tarjeta_id: string;
+      fecha_entrega: string;
+      receptor_nombre: string;
+      funcionario_entrega: string;
+      vigente: boolean;
+    }>(
+      `SELECT e.rol, e.tarjeta_id, to_char(e.fecha_entrega, 'YYYY-MM-DD') AS fecha_entrega, e.receptor_nombre,
+              e.funcionario_entrega, e.vigente
+         FROM entregas e JOIN beneficios b ON b.id = e.beneficio_id
+        WHERE b.solicitud_id = $1 ORDER BY e.id`,
+      [solicitudId],
+    );
+    return r.rows.map((x) => ({
+      rol: x.rol,
+      tarjeta: `${'*'.repeat(Math.max(x.tarjeta_id.length - 4, 0))}${x.tarjeta_id.slice(-4)}`,
+      fechaEntrega: x.fecha_entrega,
+      receptor: x.receptor_nombre,
+      funcionario: x.funcionario_entrega,
+      vigente: x.vigente,
+    }));
+  },
+
+  async subsanaciones(db: Queryable, solicitudId: number) {
+    const r = await db.query<{
+      created_at: Date;
+      vence_at: Date;
+      estado: string;
+      respondida_at: Date | null;
+      items: { nombre: string; observacion: string }[];
+    }>(
+      `SELECT created_at, vence_at, estado, respondida_at, items FROM subsanaciones
+        WHERE solicitud_id = $1 ORDER BY id`,
+      [solicitudId],
+    );
+    return r.rows.map((x) => ({
+      pedidaAt: x.created_at,
+      venceAt: x.vence_at,
+      estado: x.estado,
+      respondidaAt: x.respondida_at,
+      items: x.items.map((i) => ({ requisito: i.nombre, observacion: i.observacion })),
+    }));
+  },
+
+  /** Correos rebotados que todavía no se reenviaron. */
+  async rebotadosSinReenviar(db: Queryable, solicitudId: number): Promise<number[]> {
+    const r = await db.query<{ id: string }>(
+      `SELECT c.id FROM correos c
+        WHERE c.solicitud_id = $1 AND c.estado = 'REBOTADO'
+          AND NOT EXISTS (SELECT 1 FROM correos r WHERE r.reenvio_de = c.id)
+        ORDER BY c.id`,
+      [solicitudId],
+    );
+    return r.rows.map((x) => Number(x.id));
+  },
+
+  /** Copia el texto exacto de un correo rebotado hacia una nueva dirección. */
+  async reenviar(db: Queryable, correoId: number, destinatario: string): Promise<number | null> {
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO correos (solicitud_id, tipo, plantilla_version, destinatario, asunto, cuerpo, reenvio_de)
+       SELECT solicitud_id, tipo, plantilla_version, $2, asunto, cuerpo, id FROM correos
+        WHERE id = $1 AND estado = 'REBOTADO' AND secretos IS NULL
+       RETURNING id`,
+      [correoId, destinatario],
+    );
+    return r.rows[0] ? Number(r.rows[0].id) : null;
+  },
+
+  async correoDe(db: Queryable, correoId: number) {
+    const r = await db.query<{
+      solicitud_id: number;
+      destinatario: string;
+      estado: string;
+      reenviado: boolean;
+    }>(
+      `SELECT c.solicitud_id, c.destinatario, c.estado,
+              EXISTS (SELECT 1 FROM correos r WHERE r.reenvio_de = c.id) AS reenviado
+         FROM correos c WHERE c.id = $1`,
+      [correoId],
+    );
+    return r.rows[0] ?? null;
+  },
+
   async documentos(db: Queryable, solicitudId: number) {
-    const r = await db.query<{ nombre: string; estado: string; version: number; nombre_original: string; origen: string; cargado_at: Date }>(
+    const r = await db.query<{
+      nombre: string;
+      estado: string;
+      version: number;
+      nombre_original: string;
+      origen: string;
+      cargado_at: Date;
+    }>(
       `SELECT d.nombre, ds.estado, ROW_NUMBER() OVER (PARTITION BY ds.documento_id ORDER BY ds.id)::int AS version,
               ds.nombre_original, ds.origen, ds.cargado_at
          FROM documentos_solicitud ds JOIN documentos_requeridos d ON d.id = ds.documento_id
@@ -303,6 +511,8 @@ export interface FiltroTablero {
 export interface Indicadores {
   preinscritos: number;
   caracterizados: number;
+  en_verificacion: number;
+  por_subsanar: number;
   validados: number;
   rechazados: number;
   priorizados: number;
@@ -324,7 +534,12 @@ export const tableroRepo = {
       params.push(f.localidadId);
       donde.push(`s.localidad_id = $${params.length}`);
     }
-    if (f.poblacion) donde.push(f.poblacion === 'CON_CUIDADOR' ? 'c.requiere_cuidador IS TRUE' : 'c.requiere_cuidador IS NOT TRUE');
+    if (f.poblacion)
+      donde.push(
+        f.poblacion === 'CON_CUIDADOR'
+          ? 'c.requiere_cuidador IS TRUE'
+          : 'c.requiere_cuidador IS NOT TRUE',
+      );
     if (f.etapa) {
       params.push(f.etapa);
       donde.push(`s.estado = ANY($${params.length}::text[])`);
@@ -335,6 +550,8 @@ export const tableroRepo = {
        SELECT
          (SELECT COUNT(*) FROM base)::int AS preinscritos,
          (SELECT COUNT(*) FROM base WHERE radicada_at IS NOT NULL)::int AS caracterizados,
+         (SELECT COUNT(*) FROM base WHERE estado IN ('EN_REVISION', 'SUBSANADA'))::int AS en_verificacion,
+         (SELECT COUNT(*) FROM base WHERE estado = 'EN_SUBSANACION')::int AS por_subsanar,
          (SELECT COUNT(*) FROM base WHERE estado IN ('VALIDADA', 'PRIORIZADA', 'EN_LISTA_ESPERA', 'ASIGNADA'))::int AS validados,
          (SELECT COUNT(*) FROM base WHERE estado = 'NO_CUMPLE')::int AS rechazados,
          (SELECT COUNT(*) FROM base b JOIN priorizaciones p ON p.solicitud_id = b.id AND p.vigente)::int AS priorizados,
@@ -358,8 +575,18 @@ export const tableroRepo = {
       params.push(f.localidadId);
       donde.push(`s.localidad_id = $${params.length}`);
     }
-    if (f.poblacion) donde.push(f.poblacion === 'CON_CUIDADOR' ? 'c.requiere_cuidador IS TRUE' : 'c.requiere_cuidador IS NOT TRUE');
-    const r = await db.query<{ validacion: string | null; priorizacion: string | null; asignacion: string | null; entrega: string | null }>(
+    if (f.poblacion)
+      donde.push(
+        f.poblacion === 'CON_CUIDADOR'
+          ? 'c.requiere_cuidador IS TRUE'
+          : 'c.requiere_cuidador IS NOT TRUE',
+      );
+    const r = await db.query<{
+      validacion: string | null;
+      priorizacion: string | null;
+      asignacion: string | null;
+      entrega: string | null;
+    }>(
       `WITH casos AS (
          SELECT s.id, s.radicada_at,
                 (SELECT MIN(d.decidido_at) FROM validacion_decisiones d WHERE d.solicitud_id = s.id) AS primera_decision,
@@ -380,7 +607,12 @@ export const tableroRepo = {
     );
     const x = r.rows[0];
     const n = (v: string | null | undefined) => (v === null || v === undefined ? null : Number(v));
-    return { validacion: n(x?.validacion), priorizacion: n(x?.priorizacion), asignacion: n(x?.asignacion), entrega: n(x?.entrega) };
+    return {
+      validacion: n(x?.validacion),
+      priorizacion: n(x?.priorizacion),
+      asignacion: n(x?.asignacion),
+      entrega: n(x?.entrega),
+    };
   },
 
   async presupuesto(db: Queryable, vigenciaId: number) {
@@ -392,7 +624,9 @@ export const tableroRepo = {
       [vigenciaId],
     );
     const x = r.rows[0];
-    return x ? { total: Number(x.total), cupos: x.cupos, comprometido: Number(x.comprometido) } : null;
+    return x
+      ? { total: Number(x.total), cupos: x.cupos, comprometido: Number(x.comprometido) }
+      : null;
   },
 
   async ultimaEncuestaConRespuestas(db: Queryable): Promise<number | null> {
@@ -412,7 +646,11 @@ export const tableroRepo = {
         WHERE s.vigencia_id = $1 GROUP BY loc.nombre ORDER BY solicitudes DESC`,
       [vigenciaId],
     );
-    return r.rows.map((x) => ({ localidad: x.localidad ?? 'Sin localidad', solicitudes: x.solicitudes, asignados: x.asignados }));
+    return r.rows.map((x) => ({
+      localidad: x.localidad ?? 'Sin localidad',
+      solicitudes: x.solicitudes,
+      asignados: x.asignados,
+    }));
   },
 };
 
@@ -445,11 +683,15 @@ export const biRepo = {
     }
     if (f.desde) {
       params.push(f.desde);
-      donde.push(`ocurrido_at >= ($${params.length}::date)::timestamp AT TIME ZONE 'America/Bogota'`);
+      donde.push(
+        `ocurrido_at >= ($${params.length}::date)::timestamp AT TIME ZONE 'America/Bogota'`,
+      );
     }
     if (f.hasta) {
       params.push(f.hasta);
-      donde.push(`ocurrido_at < (($${params.length}::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`);
+      donde.push(
+        `ocurrido_at < (($${params.length}::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`,
+      );
     }
     params.push(f.limite);
     const r = await db.query<{

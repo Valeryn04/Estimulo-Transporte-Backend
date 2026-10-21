@@ -2888,6 +2888,123 @@ paths:
         '200': { description: Vigencias, localidades y estados }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
+  /publico/config:
+    get:
+      tags: [Portal ciudadano]
+      summary: Configuración pública del portal
+      description: 'Devuelve la llave del sitio de Cloudflare Turnstile (null si la verificación está desactivada). Con la verificación activa, la preinscripción, el reenvío del enlace, la solicitud del código de consulta y el inicio de sesión interno exigen la cabecera X-Turnstile-Token; sin ella responden 422 VERIFICACION_ROBOT.'
+      responses:
+        '200': { description: Configuración pública }
+  /admin/novedades/beneficios/{id}/finalizar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: Finalizar el beneficio (RF-BEN-05)
+      description: 'Multipart: «datos» (JSON con causalId, fechaEfectiva y observacion) y «archivo» con el soporte. Libera el cupo, alerta al asignador y avisa a la persona por correo. No se puede finalizar con una revocatoria en curso.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '201': { description: Beneficio finalizado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/beneficios/{id}/datos:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: Actualizar la dirección, el correo o el cuidador del beneficiario (RF-BEN-05)
+      description: 'Multipart: «datos» (JSON con dato = DIRECCION, CORREO o CUIDADOR, justificacion y los valores nuevos) y «archivo» con el soporte. Conserva el valor anterior. Un cuidador nuevo no puede tener otro beneficio vigente (RN-01) y su tarjeta se entrega después.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '201': { description: Dato actualizado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/datos/{id}/evidencia:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Novedades]
+      summary: Descargar el soporte de una actualización de datos
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /publico/consulta/revocatoria:
+    get:
+      tags: [Portal ciudadano]
+      summary: Trámite de revocatoria en curso de la persona (RF-BEN-04)
+      description: 'Muestra las razones trasladadas, el plazo y si todavía puede presentar descargos. Requiere la sesión de consulta.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200': { description: Revocatoria en curso o null }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+  /publico/consulta/descargos:
+    post:
+      tags: [Portal ciudadano]
+      summary: Presentar descargos en una revocatoria (RF-BEN-04)
+      description: 'Multipart: campo «texto» (mínimo 10 caracteres) y, opcionalmente, «archivo». Solo dentro del plazo del traslado.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '201': { description: Descargos recibidos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/bitacora/exportar:
+    get:
+      tags: [Seguimiento]
+      summary: Exportar la bitácora filtrada a Excel o PDF (RNF-07)
+      description: 'Mismos filtros que la consulta. No incluye los valores anteriores y nuevos. La exportación queda registrada.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: formato, in: query, required: true, schema: { type: string, enum: [XLSX, PDF] } }
+        - { name: radicado, in: query, schema: { type: string } }
+        - { name: usuario, in: query, schema: { type: string } }
+        - { name: modulo, in: query, schema: { type: string } }
+        - { name: accion, in: query, schema: { type: string } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/expedientes/{solicitudId}/correo:
+    parameters:
+      - { name: solicitudId, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Seguimiento]
+      summary: Corregir el correo de la persona y reenviar lo rebotado (RF-COM-03)
+      description: 'Multipart: «datos» (JSON con correo y justificacion) y «archivo» con el soporte. Reenvía con el texto exacto original las comunicaciones rebotadas que no se hayan reenviado.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '201': { description: Correo actualizado, con la cantidad de comunicaciones reenviadas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/expedientes/{solicitudId}/comunicaciones/{correoId}/reenviar:
+    parameters:
+      - { name: solicitudId, in: path, required: true, schema: { type: integer } }
+      - { name: correoId, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Seguimiento]
+      summary: Reenviar una comunicación rebotada al correo registrado hoy (RF-COM-03)
+      description: 'Solo si el correo registrado cambió desde el rebote.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '202': { description: La comunicación quedó en la cola de envío }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
 
 components:
   securitySchemes:
@@ -2909,6 +3026,8 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+
+
 
 
     EncuestaEntrada:

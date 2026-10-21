@@ -32,6 +32,11 @@ export interface EntregaEntrada {
   funcionarioEntrega: string;
 }
 
+const ESTADOS_CON_ENTREGA: readonly string[] = [
+  'PENDIENTE_ENTREGA',
+  'PENDIENTE_ACTIVACION',
+  'ACTIVO',
+];
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'long', timeZone: 'UTC' });
 
 /**
@@ -75,7 +80,10 @@ export class ServicioEntregas {
         tipoIdentificacion: p.tipoIdentificacion,
         numero: p.numero,
       })),
-      pendientes: b.estado === 'PENDIENTE_ENTREGA' ? rolesPendientes(b.personas, entregados) : [],
+      // Tras un cambio de cuidador, la tarjeta del nuevo se entrega aunque el beneficio ya esté activo.
+      pendientes: ESTADOS_CON_ENTREGA.includes(b.estado)
+        ? rolesPendientes(b.personas, entregados)
+        : [],
       entregas: entregas.map((e) => ({
         id: e.id,
         rol: e.rol,
@@ -140,9 +148,10 @@ export class ServicioEntregas {
       await fijarActor(tx, actor.id);
       const b = await entregasRepo.beneficio(tx, beneficioId, true);
       if (!b) throw notFound('El beneficio no existe', 'BENEFICIO_NO_ENCONTRADO');
-      if (b.estado !== 'PENDIENTE_ENTREGA') {
+      if (!ESTADOS_CON_ENTREGA.includes(b.estado)) {
         throw conflict('BENEFICIO_NO_PENDIENTE', 'Este beneficio ya no está pendiente de entrega.');
       }
+      const reposicion = b.estado !== 'PENDIENTE_ENTREGA';
       const personas = await entregasRepo.personas(tx, beneficioId);
       const entregas = (await entregasRepo.entregas(tx, beneficioId)).filter((e) => e.vigente);
       const persona = personas.find((p) => p.rol === d.rol);
@@ -217,8 +226,10 @@ export class ServicioEntregas {
         throw error;
       }
       const pendientes = rolesPendientes(b.personas, [...entregas.map((e) => e.rol), d.rol]);
-      const estado = estadoTrasEntrega(pendientes.length, activacionInmediata);
-      if (estado !== 'PENDIENTE_ENTREGA') {
+      const estado = reposicion
+        ? (b.estado as 'PENDIENTE_ACTIVACION' | 'ACTIVO')
+        : estadoTrasEntrega(pendientes.length, activacionInmediata);
+      if (!reposicion && estado !== 'PENDIENTE_ENTREGA') {
         await entregasRepo.fijarEstado(tx, beneficioId, estado, estado === 'ACTIVO');
       }
       const [recomendaciones, causales, transporte] = await Promise.all([

@@ -72,7 +72,13 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
 
   it('cada ruta pide su permiso', async () => {
     expect((await request(e.app).get(`${adm}/bitacora`)).status).toBe(401);
-    for (const ruta of ['/bitacora', '/expedientes?q=abc', '/tablero', '/reportes', '/bi/eventos']) {
+    for (const ruta of [
+      '/bitacora',
+      '/expedientes?q=abc',
+      '/tablero',
+      '/reportes',
+      '/bi/eventos',
+    ]) {
       expect((await get(validador, ruta)).status, ruta).toBe(403);
     }
     expect((await get(control, '/bi/eventos')).status).toBe(403);
@@ -104,7 +110,9 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
       const usu = await get(control, `/bitacora?usuario=${asignador.usuario}`);
       expect(usu.body.items.length).toBeGreaterThan(0);
       const hoy = new Date().toISOString().slice(0, 10);
-      expect((await get(control, `/bitacora?desde=${hoy}&hasta=${hoy}`)).body.total).toBeGreaterThan(0);
+      expect(
+        (await get(control, `/bitacora?desde=${hoy}&hasta=${hoy}`)).body.total,
+      ).toBeGreaterThan(0);
       expect((await get(control, '/bitacora?hasta=2020-01-01')).body.total).toBe(0);
       const pag = await get(control, '/bitacora?tamano=2&pagina=2');
       expect(pag.body.items).toHaveLength(2);
@@ -171,9 +179,18 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
     it('cuenta cada etapa, el avance contra la meta y la ejecución presupuestal', async () => {
       const r = await get(control, '/tablero');
       expect(r.status).toBe(200);
-      expect(r.body.embudo).toMatchObject({ preinscritos: 2, caracterizados: 2, asignados: 1, activos: 0 });
+      expect(r.body.embudo).toMatchObject({
+        preinscritos: 2,
+        caracterizados: 2,
+        asignados: 1,
+        activos: 0,
+      });
       expect(r.body.avance).toMatchObject({ meta: 3000, asignadosVigentes: 1 });
-      expect(r.body.presupuesto).toMatchObject({ total: 50000000, comprometido: 1000000, cupos: 10 });
+      expect(r.body.presupuesto).toMatchObject({
+        total: 50000000,
+        comprometido: 1000000,
+        cupos: 10,
+      });
       expect(r.body.presupuesto.disponible).toBe(49000000);
       expect(r.body.tiemposPromedioDias).toHaveProperty('validacion');
       expect(r.body.porLocalidad.length).toBeGreaterThan(0);
@@ -202,11 +219,15 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
       const ben = await get(control, '/reportes/BENEFICIARIOS');
       expect(ben.body.total).toBe(1);
       expect(ben.body.filas[0].documento).toMatch(/^\*\*\*/);
-      expect((await get(admin, '/reportes/BENEFICIARIOS')).body.filas[0].documento).not.toMatch(/^\*\*\*/);
+      expect((await get(admin, '/reportes/BENEFICIARIOS')).body.filas[0].documento).not.toMatch(
+        /^\*\*\*/,
+      );
       const prio = await get(control, '/reportes/LISTADO_PRIORIZADO');
       expect(prio.body.filas.map((f: { posicion: number }) => f.posicion)).toEqual([1, 2]);
       const estado = await get(control, '/reportes/SOLICITUDES_POR_ESTADO?estado=ASIGNADA');
-      expect(estado.body.filas).toEqual([expect.objectContaining({ estado: 'ASIGNADA', cantidad: 1 })]);
+      expect(estado.body.filas).toEqual([
+        expect.objectContaining({ estado: 'ASIGNADA', cantidad: 1 }),
+      ]);
       expect((await get(control, '/reportes/BENEFICIARIOS?hasta=2020-01-01')).body.total).toBe(0);
       expect((await get(control, '/reportes/NO_EXISTE')).status).toBe(422);
     });
@@ -224,7 +245,11 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
 
       const hist = await get(control, '/reportes/exportaciones');
       expect(hist.body.items).toHaveLength(2);
-      expect(hist.body.items[0]).toMatchObject({ reporte: 'ENTREGAS', formato: 'PDF', usuario: control.usuario });
+      expect(hist.body.items[0]).toMatchObject({
+        reporte: 'ENTREGAS',
+        formato: 'PDF',
+        usuario: control.usuario,
+      });
       expect(hist.body.items[1].sha256).toMatch(/^[0-9a-f]{64}$/);
       const b = await e.pool.query(`SELECT 1 FROM bitacora WHERE accion = 'REPORTE_EXPORTADO'`);
       expect(b.rowCount).toBe(2);
@@ -259,15 +284,21 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
       const sig = await get(analista, `/bi/eventos?limite=5&despuesDe=${r.body.siguiente}`);
       expect(sig.body.items[0].eventoId).toBeGreaterThan(r.body.siguiente);
       const todos = await get(analista, '/bi/eventos?limite=5000');
-      const tipos = new Set<string>(todos.body.items.map((x: { tipoEvento: string }) => x.tipoEvento));
+      const tipos = new Set<string>(
+        todos.body.items.map((x: { tipoEvento: string }) => x.tipoEvento),
+      );
       expect(tipos.has('BENEFICIO_ASIGNADO')).toBe(true);
-      expect([...tipos].some((t) => t.startsWith('LOGIN') || t === 'BITACORA_CONSULTADA')).toBe(false);
+      expect([...tipos].some((t) => t.startsWith('LOGIN') || t === 'BITACORA_CONSULTADA')).toBe(
+        false,
+      );
       const ref = todos.body.items.find((x: { casoRef: string | null }) => x.casoRef)?.casoRef;
       expect(ref).toMatch(/^[0-9a-f]{16}$/);
     });
 
     it('también sale como CSV', async () => {
-      const r = await request(e.app).get(`${adm}/bi/eventos?formato=csv&limite=3`).set(auth(analista));
+      const r = await request(e.app)
+        .get(`${adm}/bi/eventos?formato=csv&limite=3`)
+        .set(auth(analista));
       expect(r.status).toBe(200);
       expect(r.headers['content-type']).toContain('text/csv');
       expect(r.text.split('\r\n')[0]).toContain('evento_id;ocurrido_at;tipo_evento');

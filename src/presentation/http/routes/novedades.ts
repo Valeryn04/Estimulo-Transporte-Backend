@@ -36,6 +36,55 @@ const novedadSchema = z.object({
   levantamientoProgramado: fecha('Levantamiento programado').optional(),
 });
 
+const finalizarSchema = z.object({
+  causalId: z
+    .number({ error: 'Causal: elija una de la lista' })
+    .int()
+    .positive('Causal: elija una de la lista'),
+  fechaEfectiva: fecha('Fecha efectiva'),
+  observacion: z
+    .string({ error: 'Justificación: escríbala' })
+    .trim()
+    .max(1000, 'Justificación: máximo 1000 caracteres'),
+});
+
+const justificacion = z
+  .string({ error: 'Justificación: escríbala' })
+  .trim()
+  .max(1000, 'Justificación: máximo 1000 caracteres');
+
+const datosSchema = z.discriminatedUnion(
+  'dato',
+  [
+    z.object({
+      dato: z.literal('DIRECCION'),
+      justificacion,
+      direccion: z.string({ error: 'Dirección: escríbala' }).trim().max(200),
+      localidadId: z.number({ error: 'Localidad: elija una opción' }).int().positive(),
+      barrioId: z.number({ error: 'Barrio: elija una opción' }).int().positive(),
+    }),
+    z.object({
+      dato: z.literal('CORREO'),
+      justificacion,
+      correo: z.email('Correo: escriba un correo válido, por ejemplo nombre@correo.com').max(150),
+    }),
+    z.object({
+      dato: z.literal('CUIDADOR'),
+      justificacion,
+      tipoIdentificacionId: z
+        .number({ error: 'Tipo de identificación: elija una opción' })
+        .int()
+        .positive(),
+      numeroIdentificacion: z
+        .string({ error: 'Número de identificación: escríbalo' })
+        .trim()
+        .max(25),
+      nombre: z.string({ error: 'Nombre: escríbalo' }).trim().max(150),
+    }),
+  ],
+  { error: 'Dato: elija qué se actualiza' },
+);
+
 const iniciarSchema = z.object({
   causalId: z
     .number({ error: 'Causal: elija una de la lista' })
@@ -144,6 +193,28 @@ export function rutasNovedades(s: Servicios): Router {
           contexto(req),
         ),
       );
+  });
+
+  r.post('/beneficios/:id/finalizar', gestionar, recibirArchivo, async (req, res) => {
+    const d = datosDe(req, finalizarSchema);
+    await s.actualizaciones.finalizar(req.actor!, idParam(req), d, archivoDe(req), contexto(req));
+    res.status(201).json(await s.novedades.beneficio(idParam(req)));
+  });
+
+  r.post('/beneficios/:id/datos', gestionar, recibirArchivo, async (req, res) => {
+    const d = datosDe(req, datosSchema);
+    await s.actualizaciones.actualizarDatos(
+      req.actor!,
+      idParam(req),
+      d,
+      archivoDe(req),
+      contexto(req),
+    );
+    res.status(201).json(await s.novedades.beneficio(idParam(req)));
+  });
+
+  r.get('/datos/:id/evidencia', ver, async (req, res) => {
+    enviarArchivo(res, await s.actualizaciones.evidencia(idParam(req)));
   });
 
   r.get('/novedades/:id/evidencia', ver, async (req, res) => {

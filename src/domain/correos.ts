@@ -22,7 +22,10 @@ export type TipoCorreo =
   | 'NOVEDAD_BENEFICIO'
   | 'REVOCATORIA_TRASLADO'
   | 'REVOCATORIA_DECISION'
-  | 'ENCUESTA_INVITACION';
+  | 'ENCUESTA_INVITACION'
+  | 'FINALIZACION_BENEFICIO'
+  | 'RECORDATORIO_SUBSANACION'
+  | 'SUBSANACION_VENCIDA';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {

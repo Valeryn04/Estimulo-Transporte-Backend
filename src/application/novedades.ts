@@ -1,6 +1,7 @@
 import { ACCION, MODULO } from '../domain/acciones.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
+import { actualizacionesRepo } from '../infrastructure/repositories/actualizaciones.js';
 import { alertasRepo, type EstadoBeneficio } from '../infrastructure/repositories/asignacion.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import type { Estructura } from '../infrastructure/repositories/cruces.js';
@@ -34,6 +35,7 @@ const NOMBRE_TIPO: Record<TipoNovedad, string> = {
   BLOQUEO: 'Bloqueo temporal',
   SUSPENSION: 'Suspensión',
   LEVANTAMIENTO: 'Reactivación del beneficio',
+  FINALIZACION: 'Finalización del beneficio',
 };
 
 const vistaRevocatoria = (r: Revocatoria) => ({
@@ -79,6 +81,7 @@ export class ServicioNovedades {
     return {
       bloqueo: await novedadesRepo.causales(pool, 'CAUSAL_BLOQUEO'),
       revocatoria: await novedadesRepo.causales(pool, 'CAUSAL_REVOCATORIA'),
+      finalizacion: await novedadesRepo.causales(pool, 'CAUSAL_FINALIZACION'),
     };
   }
 
@@ -87,8 +90,9 @@ export class ServicioNovedades {
     const { pool } = this.deps;
     const b = await entregasRepo.beneficio(pool, beneficioId);
     if (!b) throw notFound('El beneficio no existe', 'BENEFICIO_NO_ENCONTRADO');
-    const [novedades, revocatorias] = await Promise.all([
+    const [novedades, actualizaciones, revocatorias] = await Promise.all([
       novedadesRepo.delBeneficio(pool, beneficioId),
+      actualizacionesRepo.delBeneficio(pool, beneficioId),
       revocatoriasRepo.listar(pool, { limit: 100, offset: 0 }),
     ]);
     return {
@@ -105,6 +109,7 @@ export class ServicioNovedades {
         tipoNombre: NOMBRE_TIPO[n.tipo],
         creadaAt: n.creadaAt.toISOString(),
       })),
+      actualizaciones: actualizaciones.map((a) => ({ ...a, creadaAt: a.creadaAt.toISOString() })),
       revocatorias: revocatorias.items
         .filter((r) => r.beneficioId === beneficioId)
         .map(vistaRevocatoria),
@@ -437,7 +442,7 @@ export class ServicioNovedades {
 
   /** Registra los descargos de la persona (recibidos dentro del plazo) o, vencido el plazo, que no hubo. */
   async registrarDescargos(
-    actor: Actor,
+    actor: Actor | null,
     id: number,
     d: { texto: string; sinDescargos: boolean },
     archivo: ArchivoEntrada | null,
@@ -453,7 +458,7 @@ export class ServicioNovedades {
       ? await this.documentos.guardarEvidencia(`revocatorias/${id}`, archivo)
       : null;
     await withTransaction(pool, async (tx) => {
-      await fijarActor(tx, actor.id);
+      if (actor) await fijarActor(tx, actor.id);
       const r = await revocatoriasRepo.porId(tx, id, true);
       if (!r) throw notFound('La revocatoria no existe', 'REVOCATORIA_NO_ENCONTRADA');
       if (r.estado !== 'EN_TRASLADO' || r.sinDescargos) {
@@ -481,14 +486,14 @@ export class ServicioNovedades {
           : d.texto.trim(),
         fecha: hoy,
         evidencia,
-        usuarioId: actor.id,
+        usuarioId: actor?.id ?? null,
       });
       if (d.sinDescargos) await revocatoriasRepo.fijarSinDescargos(tx, id);
       else await revocatoriasRepo.fijarDescargos(tx, id);
       await bitacoraRepo.registrar(tx, {
-        usuarioId: actor.id,
+        usuarioId: actor?.id ?? null,
         modulo: MODULO.NOVEDADES,
-        accion: ACCION.REVOCATORIA_DESCARGOS,
+        accion: actor ? ACCION.REVOCATORIA_DESCARGOS : ACCION.DESCARGOS_CIUDADANO,
         entidad: 'revocatoria',
         entidadId: id,
         solicitudId: r.solicitudId,
@@ -501,6 +506,48 @@ export class ServicioNovedades {
       });
     });
     return this.revocatoria(id);
+  }
+
+  /** Descargos presentados por la persona beneficiaria desde el portal ciudadano (RF-BEN-04). */
+  async descargosDeLaPersona(
+    solicitudId: number,
+    d: { texto: string },
+    archivo: ArchivoEntrada | null,
+    ctx: ContextoPeticion,
+  ) {
+    const r = await revocatoriasRepo.abiertaDeSolicitud(this.deps.pool, solicitudId);
+    if (!r || r.estado !== 'EN_TRASLADO' || r.sinDescargos) {
+      throw conflict('SIN_TRASLADO', 'No hay un trámite de revocatoria esperando sus descargos.');
+    }
+    await this.registrarDescargos(
+      null,
+      r.id,
+      { texto: d.texto, sinDescargos: false },
+      archivo,
+      ctx,
+    );
+  }
+
+  /** Lo que la persona ve de una revocatoria en curso: las razones, el plazo y si todavía puede presentar descargos. */
+  async revocatoriaParaLaPersona(solicitudId: number) {
+    const { pool } = this.deps;
+    const r = await revocatoriasRepo.abiertaDeSolicitud(pool, solicitudId);
+    if (!r) return null;
+    const eventos = await revocatoriasRepo.eventos(pool, r.id);
+    const traslado = eventos.find((e) => e.etapa === 'TRASLADO');
+    const vence = r.venceDescargosAt;
+    return {
+      causal: r.causal,
+      estado: r.estado,
+      razones: traslado?.texto ?? null,
+      venceDescargosAt: vence?.toISOString() ?? null,
+      puedePresentarDescargos:
+        r.estado === 'EN_TRASLADO' &&
+        !r.sinDescargos &&
+        vence !== null &&
+        vence.getTime() > Date.now(),
+      presentoDescargos: r.estado === 'CON_DESCARGOS',
+    };
   }
 
   /**

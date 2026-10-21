@@ -2,6 +2,10 @@ import { MENSAJE_DIRECCION, esDireccionEstandar } from '../../../domain/direccio
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Servicios } from '../../../container.js';
+import {
+  exigirTurnstile,
+  type VerificadorTurnstile,
+} from '../../../infrastructure/security/turnstile.js';
 import type { TokenService } from '../../../infrastructure/security/tokens.js';
 import type { CambiosCaracterizacion } from '../../../application/caracterizacion.js';
 import { normalizarTelefono } from '../../../domain/caracterizacion.js';
@@ -251,15 +255,26 @@ const caracterizacionSchema = z
   .strict();
 
 /** Portal ciudadano: no requiere sesión. Cada ruta lleva su límite de peticiones (RNF-04). */
-export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenService): Router {
+export function rutasPublicas(
+  s: Servicios,
+  limites: Limitadores,
+  tokens: TokenService,
+  turnstile: VerificadorTurnstile,
+): Router {
   const r = Router();
+  const robot = exigirTurnstile(turnstile);
+
+  /** Configuración que necesita el portal antes de pintar los formularios. */
+  r.get('/config', (_req, res) => {
+    res.json({ turnstileSiteKey: turnstile.siteKey });
+  });
 
   /** Datos del formulario de preinscripción: catálogos activos, texto de autorización y token anti-automatización. */
   r.get('/preinscripcion/formulario', limites.formulario, async (_req, res) => {
     res.json(await s.preinscripcion.formulario());
   });
 
-  r.post('/preinscripciones', limites.preinscripcion, async (req, res) => {
+  r.post('/preinscripciones', limites.preinscripcion, robot, async (req, res) => {
     const d = preinscripcionSchema.parse(req.body);
     const resultado = await s.preinscripcion.preinscribir(d, {
       ip: req.ip ?? null,
@@ -276,7 +291,7 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
     res.json(await s.preinscripcion.verificarCorreo(token, { ip: req.ip ?? null }));
   });
 
-  r.post('/preinscripciones/reenviar-verificacion', limites.reenvio, async (req, res) => {
+  r.post('/preinscripciones/reenviar-verificacion', limites.reenvio, robot, async (req, res) => {
     const d = reenvioSchema.parse(req.body);
     await s.preinscripcion.reenviarVerificacion(d, { ip: req.ip ?? null });
     // Respuesta idéntica exista o no la solicitud: no se revela qué identificaciones están registradas.
@@ -289,7 +304,7 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
   // ---- consulta del estado (RF-PRE-05)
 
   /** Envía un código de un solo uso al correo verificado. Responde igual exista o no la solicitud. */
-  r.post('/consulta/solicitar-codigo', limites.codigo, async (req, res) => {
+  r.post('/consulta/solicitar-codigo', limites.codigo, robot, async (req, res) => {
     const d = solicitudConsultaSchema.parse(req.body);
     await s.consulta.solicitarCodigo(d, { ip: req.ip ?? null });
     res.status(202).json({
@@ -312,6 +327,43 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
   r.get('/consulta/solicitud', autenticarCiudadano(tokens), async (req, res) => {
     res.json(await s.consulta.consultar(req.solicitudId as number));
   });
+
+  // ---- descargos de la persona en una revocatoria (RF-BEN-04)
+
+  /** El trámite de revocatoria en curso: razones, plazo y si todavía puede presentar descargos. */
+  r.get('/consulta/revocatoria', autenticarCiudadano(tokens), async (req, res) => {
+    res.json({
+      revocatoria: await s.novedades.revocatoriaParaLaPersona(req.solicitudId as number),
+    });
+  });
+
+  /** La persona presenta sus descargos (texto y, si quiere, un archivo) dentro del plazo. */
+  r.post(
+    '/consulta/descargos',
+    limites.documentos,
+    autenticarCiudadano(tokens),
+    recibirArchivo,
+    async (req, res) => {
+      const { texto } = z
+        .object({
+          texto: z
+            .string({ error: 'Descargos: escríbalos' })
+            .trim()
+            .min(10, 'Descargos: cuéntenos qué desea responder (mínimo 10 caracteres)')
+            .max(4000, 'Descargos: máximo 4000 caracteres'),
+        })
+        .parse(req.body);
+      await s.novedades.descargosDeLaPersona(
+        req.solicitudId as number,
+        { texto },
+        req.file ? archivoDe(req) : null,
+        { ip: req.ip ?? null },
+      );
+      res
+        .status(201)
+        .json({ mensaje: 'Recibimos sus descargos. Serán tenidos en cuenta en la decisión.' });
+    },
+  );
 
   // ---- encuesta de satisfacción (RF-NOV-04): con el enlace personal que llega por correo
 

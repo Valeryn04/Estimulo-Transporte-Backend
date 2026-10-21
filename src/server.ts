@@ -35,6 +35,11 @@ const tareaPlazos = setInterval(() => {
   void servicios.novedades
     .revisarPlazos()
     .catch((e: unknown) => logger.error({ err: e }, 'No se pudieron revisar los plazos'));
+  void servicios.subsanacion
+    .revisarPlazos()
+    .catch((e: unknown) =>
+      logger.error({ err: e }, 'No se pudieron revisar los plazos de subsanación'),
+    );
 }, 600_000);
 servicios.correos.despachar(); // por si quedaron correos pendientes de una ejecución anterior
 

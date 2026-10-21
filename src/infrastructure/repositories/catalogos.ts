@@ -13,6 +13,7 @@ export const CATALOGOS = [
   'OCUPACION',
   'CAUSAL_BLOQUEO',
   'CAUSAL_REVOCATORIA',
+  'CAUSAL_FINALIZACION',
 ] as const;
 export type Catalogo = (typeof CATALOGOS)[number];
 

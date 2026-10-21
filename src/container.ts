@@ -2,7 +2,9 @@ import type { Env } from './config/env.js';
 import type { Dependencias } from './application/contexto.js';
 import { ServicioAsignacion } from './application/asignacion.js';
 import { ServicioEntregas } from './application/entregas.js';
+import { ServicioActualizaciones } from './application/actualizaciones.js';
 import { ServicioEncuestas } from './application/encuestas.js';
+import { crearTurnstile } from './infrastructure/security/turnstile.js';
 import { ServicioSeguimiento } from './application/seguimiento.js';
 import { ServicioNovedades } from './application/novedades.js';
 import { ServicioAutenticacion } from './application/autenticacion.js';
@@ -51,6 +53,7 @@ export interface Servicios {
   entregas: ServicioEntregas;
   novedades: ServicioNovedades;
   encuestas: ServicioEncuestas;
+  actualizaciones: ServicioActualizaciones;
   seguimiento: ServicioSeguimiento;
 }
 
@@ -60,6 +63,7 @@ export function crearDependencias(env: Env): Dependencias {
     pool: createPool(env.databaseUrl, env.dbPoolMax),
     mailer: new SmtpMailer({ ...env.smtp, from: env.mailFrom }),
     tokens: new TokenService(env.jwtSecret),
+    turnstile: crearTurnstile(env.turnstile),
     ahora: () => new Date(),
   };
 }
@@ -98,6 +102,7 @@ export function crearServicios(deps: Dependencias): Servicios {
     entregas: new ServicioEntregas(deps, correos, documentos),
     novedades,
     encuestas,
-    seguimiento: new ServicioSeguimiento(deps, encuestas),
+    actualizaciones: new ServicioActualizaciones(deps, correos, documentos, asignacion),
+    seguimiento: new ServicioSeguimiento(deps, encuestas, correos, documentos),
   };
 }

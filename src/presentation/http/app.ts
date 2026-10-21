@@ -68,7 +68,7 @@ export function crearAplicacion(
   });
 
   // Portal ciudadano (sin sesión).
-  v1.use('/publico', rutasPublicas(servicios, limites, deps.tokens));
+  v1.use('/publico', rutasPublicas(servicios, limites, deps.tokens, deps.turnstile));
 
   // Reportes de entrega del proveedor de correo (RNF-13), protegidos con un secreto compartido.
   v1.post('/webhooks/correo', async (req, res) => {
@@ -86,7 +86,7 @@ export function crearAplicacion(
 
   // El portal interno y la API de administración pueden restringirse por IP.
   const soloRedInterna = restriccionIp(env.internalAllowedIps);
-  v1.use('/auth', soloRedInterna, rutasAuth(servicios, limites, env));
+  v1.use('/auth', soloRedInterna, rutasAuth(servicios, limites, env, deps.turnstile));
   v1.use('/admin', soloRedInterna, rutasAdmin(servicios));
 
   if (env.apiDocs) publicarDocumentacion(app);

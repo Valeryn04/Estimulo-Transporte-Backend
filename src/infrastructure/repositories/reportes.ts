@@ -46,13 +46,20 @@ function condiciones(f: FiltroReporte, params: unknown[]): string {
     return `$${params.length}`;
   };
   donde.push(`s.vigencia_id = ${p(f.vigenciaId)}`);
-  if (f.desde) donde.push(`s.created_at >= (${p(f.desde)}::date)::timestamp AT TIME ZONE 'America/Bogota'`);
+  if (f.desde)
+    donde.push(`s.created_at >= (${p(f.desde)}::date)::timestamp AT TIME ZONE 'America/Bogota'`);
   if (f.hasta)
-    donde.push(`s.created_at < ((${p(f.hasta)}::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`);
+    donde.push(
+      `s.created_at < ((${p(f.hasta)}::date) + 1)::timestamp AT TIME ZONE 'America/Bogota'`,
+    );
   if (f.localidadId) donde.push(`s.localidad_id = ${p(f.localidadId)}`);
   if (f.estado) donde.push(`s.estado = ${p(f.estado)}`);
   if (f.poblacion)
-    donde.push(f.poblacion === 'CON_CUIDADOR' ? 'c.requiere_cuidador IS TRUE' : 'c.requiere_cuidador IS NOT TRUE');
+    donde.push(
+      f.poblacion === 'CON_CUIDADOR'
+        ? 'c.requiere_cuidador IS TRUE'
+        : 'c.requiere_cuidador IS NOT TRUE',
+    );
   return donde.join(' AND ');
 }
 
@@ -71,7 +78,12 @@ const fecha = (v: Date | string | null): string | null =>
 const num = (v: string | number | null): number | null => (v === null ? null : Number(v));
 
 export const reportesRepo = {
-  async generar(db: Queryable, codigo: CodigoReporte, f: FiltroReporte, o: OpcionesReporte): Promise<TablaReporte> {
+  async generar(
+    db: Queryable,
+    codigo: CodigoReporte,
+    f: FiltroReporte,
+    o: OpcionesReporte,
+  ): Promise<TablaReporte> {
     const params: unknown[] = [];
     const donde = condiciones(f, params);
     switch (codigo) {
@@ -200,7 +212,13 @@ export const reportesRepo = {
         };
       }
       case 'NOVEDADES_REVOCATORIAS': {
-        const r = await db.query<{ radicado: string; clase: string; tipo: string; causal: string | null; fecha: Date }>(
+        const r = await db.query<{
+          radicado: string;
+          clase: string;
+          tipo: string;
+          causal: string | null;
+          fecha: Date;
+        }>(
           `SELECT s.radicado, 'Novedad' AS clase, n.tipo, ca.nombre AS causal, n.fecha_efectiva AS fecha
              ${DESDE} JOIN beneficios b ON b.solicitud_id = s.id
              JOIN novedades n ON n.beneficio_id = b.id
@@ -345,7 +363,15 @@ export const exportacionesRepo = {
     const r = await db.query<{ id: string }>(
       `INSERT INTO exportaciones (usuario_id, reporte, formato, filtros, filas, archivo_nombre, archivo_sha256)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [e.usuarioId, e.reporte, e.formato, JSON.stringify(e.filtros), e.filas, e.archivoNombre, e.archivoSha256],
+      [
+        e.usuarioId,
+        e.reporte,
+        e.formato,
+        JSON.stringify(e.filtros),
+        e.filas,
+        e.archivoNombre,
+        e.archivoSha256,
+      ],
     );
     return Number(r.rows[0]!.id);
   },
