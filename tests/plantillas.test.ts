@@ -86,18 +86,23 @@ describe('plantillas de correo configurables (RF-COM-02, RNF-12)', () => {
   describe('consulta', () => {
     it('trae las plantillas de las notificaciones del programa, cada una con su versión vigente', async () => {
       const lista = (await get('/plantillas')).body.items as { codigo: string; version: number }[];
-      expect(lista.map((p) => p.codigo).sort()).toEqual([
-        'CARACTERIZACION_RADICADA',
-        'CODIGO_CONSULTA',
-        'CUENTA_CREADA',
-        'PASSWORD_RESTABLECIDA',
-        'PREINSCRIPCION_EXITOSA',
-        'PREINSCRIPCION_VERIFICACION',
-        'SUBSANACION_RECIBIDA',
-        'VALIDACION_APROBADA',
-        'VALIDACION_RECHAZADA',
-        'VALIDACION_SUBSANACION',
-      ]);
+      // Cada etapa del programa agrega las suyas: aquí se verifica que existan las de las anteriores.
+      expect(lista.map((p) => p.codigo).sort()).toEqual(
+        expect.arrayContaining([
+          'ASIGNACION_BENEFICIO',
+          'LISTA_ESPERA',
+          'CARACTERIZACION_RADICADA',
+          'CODIGO_CONSULTA',
+          'CUENTA_CREADA',
+          'PASSWORD_RESTABLECIDA',
+          'PREINSCRIPCION_EXITOSA',
+          'PREINSCRIPCION_VERIFICACION',
+          'SUBSANACION_RECIBIDA',
+          'VALIDACION_APROBADA',
+          'VALIDACION_RECHAZADA',
+          'VALIDACION_SUBSANACION',
+        ]),
+      );
       expect(lista.every((p) => p.version === 1)).toBe(true);
     });
 

@@ -5,6 +5,7 @@ import { autenticarInterno, requierePermisos } from '../middlewares/auth.js';
 import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { rutasConfiguracion } from './configuracion.js';
 import { rutasCruces } from './cruces.js';
+import { rutasAsignacion } from './asignacion.js';
 import { rutasMatriz } from './matriz.js';
 import { rutasPriorizacion } from './priorizacion.js';
 import { rutasValidacion } from './validacion.js';
@@ -188,6 +189,17 @@ export function rutasAdmin(s: Servicios): Router {
   r.use('/cruces', rutasCruces(s));
   r.use('/matriz', rutasMatriz(s));
   r.use('/priorizacion', rutasPriorizacion(s));
+  r.use('/asignacion', rutasAsignacion(s));
+
+  // ---- avisos internos: cada persona ve los dirigidos a los permisos de su rol
+  r.get('/alertas', async (req, res) => {
+    res.json({ items: await s.asignacion.alertas(req.actor!) });
+  });
+
+  r.post('/alertas/:id/atender', async (req, res) => {
+    await s.asignacion.atenderAlerta(req.actor!, idParam(req), contexto(req));
+    res.status(204).end();
+  });
   r.use(rutasConfiguracion(s));
 
   return r;

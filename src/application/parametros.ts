@@ -182,6 +182,16 @@ export class ServicioParametros {
       await fijarActor(tx, actor.id);
       const actual = await vigenciasRepo.porId(tx, id);
       if (!actual) throw notFound('La vigencia no existe', 'VIGENCIA_NO_ENCONTRADA');
+      if (d.cuposTotales !== actual.cuposTotales) {
+        // Los cupos y el presupuesto se modifican con su soporte desde «Cupos y presupuesto» (RF-ASI-01).
+        throw errorValidacion([
+          {
+            campo: 'cuposTotales',
+            mensaje:
+              'Cupos: se modifican en «Cupos y presupuesto», donde queda registrado el motivo y el soporte del cambio',
+          },
+        ]);
+      }
       await this.validarFechas(tx, d.fechaInicio, d.fechaFin, id);
       await vigenciasRepo.actualizar(tx, id, d);
       await bitacoraRepo.registrar(tx, {

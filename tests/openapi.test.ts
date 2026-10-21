@@ -33,6 +33,7 @@ function rutasDelCodigo(): Set<string> {
     { archivo: 'src/presentation/http/routes/cruces.ts', prefijo: '/admin/cruces' },
     { archivo: 'src/presentation/http/routes/matriz.ts', prefijo: '/admin/matriz' },
     { archivo: 'src/presentation/http/routes/priorizacion.ts', prefijo: '/admin/priorizacion' },
+    { archivo: 'src/presentation/http/routes/asignacion.ts', prefijo: '/admin/asignacion' },
     { archivo: 'src/presentation/http/app.ts', prefijo: '' },
   ];
   const rutas = new Set<string>();

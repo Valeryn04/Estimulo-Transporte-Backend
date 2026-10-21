@@ -14,7 +14,11 @@ export type TipoCorreo =
   | 'VALIDACION_APROBADA'
   | 'VALIDACION_SUBSANACION'
   | 'VALIDACION_RECHAZADA'
-  | 'SUBSANACION_RECIBIDA';
+  | 'SUBSANACION_RECIBIDA'
+  | 'ASIGNACION_BENEFICIO'
+  | 'LISTA_ESPERA'
+  | 'ENTREGA_REGISTRADA'
+  | 'BENEFICIO_ACTIVADO';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {
@@ -36,6 +40,17 @@ export interface DatosCorreo {
   /** Motivación de una decisión de validación. */
   motivacion?: string;
   plazoRecursosDias?: number;
+  /** Instrucciones de la entrega del medio de transporte (parámetros). */
+  lugarEntrega?: string;
+  documentosEntrega?: string;
+  instruccionesEntrega?: string;
+  fechaEntrega?: string;
+  /** Identificador de la tarjeta con solo los últimos caracteres visibles. */
+  tarjetaEnmascarada?: string;
+  tipoTransporte?: string;
+  recomendacionesUso?: string;
+  /** Causales de revocatoria que se recuerdan a la persona (RN-09). */
+  causalesRevocatoria?: string;
   /** Usuario de ingreso al portal interno. */
   usuario?: string;
   enlaceAcceso?: string;
@@ -90,6 +105,35 @@ export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }>
     descripcion: 'Días para interponer recursos contra una decisión',
     ejemplo: '10',
   },
+  lugar_entrega: {
+    descripcion: 'Lugar, fecha y horario de la entrega del medio de transporte',
+    ejemplo: 'Gerencia de Desarrollo Social, calle 34 # 43-31, lunes a viernes de 8:00 a 12:00',
+  },
+  documentos_entrega: {
+    descripcion: 'Documentos que debe presentar quien recibe el medio de transporte',
+    ejemplo: 'Documento de identidad original de quien recibe.',
+  },
+  instrucciones_entrega: {
+    descripcion: 'Otras instrucciones para la entrega del medio de transporte',
+    ejemplo: 'Presente este correo al recibir el medio de transporte.',
+  },
+  fecha_entrega: {
+    descripcion: 'Fecha en que se entregó el medio de transporte',
+    ejemplo: '20/04/2026',
+  },
+  tarjeta_enmascarada: {
+    descripcion: 'Identificador de la tarjeta, con solo los últimos caracteres visibles',
+    ejemplo: '*******4821',
+  },
+  tipo_transporte: { descripcion: 'Tipo de transporte del beneficio', ejemplo: 'Transmetro' },
+  recomendaciones_uso: {
+    descripcion: 'Recomendaciones de uso del medio de transporte',
+    ejemplo: 'Es personal e intransferible.',
+  },
+  causales_revocatoria: {
+    descripcion: 'Causales por las que el beneficio puede revocarse',
+    ejemplo: '- Uso por una persona distinta a la autorizada',
+  },
   nombre_funcionario: { descripcion: 'Nombre del funcionario', ejemplo: 'Carlos Gómez' },
   usuario: { descripcion: 'Usuario para ingresar al portal interno', ejemplo: 'cgomez' },
   contrasena_temporal: {
@@ -130,6 +174,14 @@ export function valoresDeCorreo(d: DatosCorreo): Record<string, string> {
     items_subsanar: d.itemsSubsanar,
     motivacion: d.motivacion,
     plazo_recursos_dias: d.plazoRecursosDias,
+    lugar_entrega: d.lugarEntrega,
+    documentos_entrega: d.documentosEntrega,
+    instrucciones_entrega: d.instruccionesEntrega,
+    fecha_entrega: d.fechaEntrega,
+    tarjeta_enmascarada: d.tarjetaEnmascarada,
+    tipo_transporte: d.tipoTransporte,
+    recomendaciones_uso: d.recomendacionesUso,
+    causales_revocatoria: d.causalesRevocatoria,
     nombre_funcionario: d.nombre,
     usuario: d.usuario,
     enlace_acceso: d.enlaceAcceso,

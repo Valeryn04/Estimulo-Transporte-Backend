@@ -1,5 +1,7 @@
 import type { Env } from './config/env.js';
 import type { Dependencias } from './application/contexto.js';
+import { ServicioAsignacion } from './application/asignacion.js';
+import { ServicioEntregas } from './application/entregas.js';
 import { ServicioAutenticacion } from './application/autenticacion.js';
 import { ServicioCatalogos } from './application/catalogos.js';
 import { ServicioCaracterizacion } from './application/caracterizacion.js';
@@ -42,6 +44,8 @@ export interface Servicios {
   cruces: ServicioCruces;
   matriz: ServicioMatriz;
   priorizacion: ServicioPriorizacion;
+  asignacion: ServicioAsignacion;
+  entregas: ServicioEntregas;
 }
 
 export function crearDependencias(env: Env): Dependencias {
@@ -78,5 +82,7 @@ export function crearServicios(deps: Dependencias): Servicios {
     cruces,
     matriz: new ServicioMatriz(deps, priorizacion),
     priorizacion,
+    asignacion: new ServicioAsignacion(deps, correos, documentos),
+    entregas: new ServicioEntregas(deps, correos, documentos),
   };
 }

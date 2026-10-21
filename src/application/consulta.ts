@@ -1,6 +1,12 @@
 import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
-import { ENTREGA_CORREO, ESTADOS, NOMBRE_COMUNICACION } from '../domain/estados.js';
+import {
+  ENTREGA_CORREO,
+  ESTADOS,
+  ESTADOS_BENEFICIO,
+  NOMBRE_COMUNICACION,
+  type EstadoBeneficioPersona,
+} from '../domain/estados.js';
 import { enmascararCorreo, normalizarNumero } from '../domain/identificacion.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
@@ -190,7 +196,19 @@ export class ServicioConsulta {
     const { pool } = this.deps;
     const s = await consultaRepo.detalle(pool, solicitudId);
     if (!s) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
-    const d = ESTADOS[s.estado];
+    let d = ESTADOS[s.estado];
+    // Con el beneficio asignado, la persona ve en qué va: entrega, activación, bloqueo o finalización.
+    let beneficio: { codigo: string } | null = null;
+    if (s.estado === 'ASIGNADA') {
+      const b = await pool.query<{ estado: EstadoBeneficioPersona }>(
+        `SELECT estado FROM beneficios WHERE solicitud_id = $1`,
+        [solicitudId],
+      );
+      if (b.rows[0]) {
+        d = ESTADOS_BENEFICIO[b.rows[0].estado];
+        beneficio = { codigo: b.rows[0].estado };
+      }
+    }
     const comunicaciones = await consultaRepo.comunicaciones(pool, solicitudId);
     return {
       vigencia: s.anio,
@@ -201,6 +219,7 @@ export class ServicioConsulta {
       fechaRadicacion: s.radicadaAt?.toISOString() ?? null,
       etapa: d.etapa,
       estado: { codigo: s.estado, nombre: d.nombre },
+      beneficio,
       explicacion: d.explicacion,
       siguientePaso: d.siguientePaso,
       aviso: AVISO_PREINSCRIPCION,

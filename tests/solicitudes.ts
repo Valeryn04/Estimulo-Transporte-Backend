@@ -141,5 +141,46 @@ export function ayudantesSolicitud(e: Entorno) {
     return { ...p, radicado: r.body.radicado as string };
   }
 
-  return { persona, caracterizar, cargarTodos, solicitudRadicada, lista, subir };
+  /**
+   * Lleva una solicitud radicada hasta quedar validada y con puntaje: el validador revisa la lista de chequeo, registra
+   * los datos de priorización (la primera opción de cada uno, salvo los indicados) y aprueba.
+   */
+  async function validada(
+    validador: { token: string },
+    valores: Record<string, string> = {},
+    opciones: { nombre?: string; cuidador?: boolean; correo?: string } = {},
+  ) {
+    const s = await solicitudRadicada(opciones);
+    const adm = '/api/v1/admin/validacion';
+    const h = { Authorization: `Bearer ${validador.token}` };
+    const tomada = await request(e.app).post(`${adm}/casos/${s.solicitudId}/tomar`).set(h).send();
+    expect(tomada.status, JSON.stringify(tomada.body)).toBe(200);
+    const caso = tomada.body as {
+      items: { id: number }[];
+      priorizacion: { variables: { codigo: string; opciones: { codigo: string }[] }[] };
+    };
+    for (const item of caso.items) {
+      const r = await request(e.app)
+        .put(`${adm}/casos/${s.solicitudId}/items/${item.id}`)
+        .set(h)
+        .send({ resultado: 'CUMPLE', fuente: 'Consulta realizada' });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+    }
+    for (const v of caso.priorizacion.variables) {
+      const r = await request(e.app)
+        .put(`${adm}/casos/${s.solicitudId}/variables/${v.codigo}`)
+        .set(h)
+        .send({ valor: valores[v.codigo] ?? v.opciones[0]!.codigo });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+    }
+    const d = await request(e.app)
+      .post(`${adm}/casos/${s.solicitudId}/decision`)
+      .set(h)
+      .send({ decision: 'APROBAR' });
+    expect(d.status, JSON.stringify(d.body)).toBe(201);
+    await e.servicios.correos.esperarDespachos();
+    return s;
+  }
+
+  return { persona, caracterizar, cargarTodos, solicitudRadicada, validada, lista, subir };
 }

@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import {
   MARCADOR_CONTRASENA,
   renderizar,
@@ -9,6 +10,8 @@ import { DataCipher } from '../infrastructure/security/crypto.js';
 import { plantillasRepo } from '../infrastructure/repositories/plantillas.js';
 import { type Queryable } from '../infrastructure/db/pool.js';
 import { correosRepo } from '../infrastructure/repositories/correos.js';
+import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
+import { tokensRepo } from '../infrastructure/repositories/solicitudes.js';
 import { ErrorEnvioCorreo } from '../infrastructure/mail/mailer.js';
 import { logger } from '../shared/logger.js';
 import type { Dependencias } from './contexto.js';
@@ -30,6 +33,26 @@ export class ServicioCorreos {
 
   constructor(private readonly deps: Dependencias) {
     this.cipher = new DataCipher(deps.env.encryption);
+  }
+
+  /**
+   * Enlace seguro y de vigencia limitada para que la persona consulte su caso (RNF-03). Se crea dentro de la
+   * transacción del hecho que se le notifica.
+   */
+  async enlaceConsulta(db: Queryable, solicitudId: number, diasMinimos = 0): Promise<string> {
+    const dias = Math.max(
+      await parametrosRepo.entero(this.deps.pool, 'enlace_seguro_dias'),
+      diasMinimos,
+    );
+    const token = randomBytes(32).toString('base64url');
+    await tokensRepo.crear(db, {
+      solicitudId,
+      proposito: 'ENLACE_SEGURO',
+      tokenHash: createHash('sha256').update(token).digest('hex'),
+      creadoAt: this.deps.ahora(),
+      expiraAt: new Date(this.deps.ahora().getTime() + dias * 86_400_000),
+    });
+    return `${this.deps.env.frontendUrl}/consulta?token=${token}`;
   }
 
   /**

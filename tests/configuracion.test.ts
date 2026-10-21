@@ -277,6 +277,11 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'archivo_formatos',
         'archivo_max_mb',
         'enlace_seguro_dias',
+        'entrega_activacion_inmediata',
+        'entrega_documentos',
+        'entrega_instrucciones',
+        'entrega_lugar',
+        'entrega_recomendaciones',
         'login_bloqueo_minutos',
         'login_max_intentos',
         'max_rondas_subsanacion',
@@ -432,12 +437,20 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       }[];
       expect(v).toHaveLength(1);
       expect(v[0]).toMatchObject({ anio: 2026, activa: true });
-      const m = await put(`/vigencias/${v[0]!.id}`, {
+      // Los cupos no se cambian por aquí: se modifican con su soporte en «Cupos y presupuesto».
+      const conCupos = await put(`/vigencias/${v[0]!.id}`, {
         fechaInicio: '2026-01-01',
         fechaFin: '2026-12-31',
         cuposTotales: 3000,
       });
-      expect(m.body.cuposTotales).toBe(3000);
+      expect(conCupos.status).toBe(422);
+      expect(conCupos.body.error.errores[0].campo).toBe('cuposTotales');
+      const m = await put(`/vigencias/${v[0]!.id}`, {
+        fechaInicio: '2026-01-01',
+        fechaFin: '2026-12-31',
+        cuposTotales: 0,
+      });
+      expect(m.body.cuposTotales).toBe(0);
       expect(m.body.version).toBe(2);
       expect((await get(`/vigencias/${v[0]!.id}/versiones`)).body.items).toHaveLength(2);
     });

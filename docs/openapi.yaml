@@ -2129,6 +2129,230 @@ paths:
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/asignacion/cupos:
+    get:
+      tags: [Asignación]
+      summary: Cupos y presupuesto de la vigencia en línea (RF-ASI-01)
+      description: 'Cupos totales, ocupados, liberados y disponibles; valor del estímulo; presupuesto total, comprometido y disponible; y la distribución por localidad y transporte con lo ocupado de cada una.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: vigenciaId, in: query, schema: { type: integer }, description: 'Por defecto, la vigencia activa' }
+      responses:
+        '200': { description: Resumen de cupos y presupuesto }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+    put:
+      tags: [Asignación]
+      summary: Modificar cupos, valor del estímulo, presupuesto o distribución
+      description: 'multipart/form-data: el campo «datos» trae el JSON del cambio y «archivo» el soporte (por ejemplo, el acto de adición presupuestal), obligatorio al cambiar los cupos o el presupuesto. El motivo es obligatorio y cada cambio queda registrado de forma inmutable. Los cupos no pueden quedar por debajo de los ocupados ni el presupuesto por debajo de lo comprometido.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos]
+              properties:
+                datos: { type: string, description: 'JSON: cuposTotales?, valorEstimulo?, presupuestoTotal?, distribucionLocalidad? [{itemId, cupos}], distribucionTransporte? [{itemId, cupos}], motivo' }
+                archivo: { type: string, format: binary }
+      responses:
+        '200': { description: Resumen actualizado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/asignacion/cupos/ajustes:
+    get:
+      tags: [Asignación]
+      summary: Historial de modificaciones de cupos y presupuesto, con su motivo y soporte
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Ajustes, el más reciente primero }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/asignacion/cupos/ajustes/{id}/soporte:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Asignación]
+      summary: Descargar el soporte de un ajuste
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/asignacion/propuesta:
+    get:
+      tags: [Asignación]
+      summary: Propuesta de asignación en orden de prioridad (RF-ASI-02)
+      description: 'Casos priorizados y en lista de espera, de mayor a menor puntaje, con lo que alcanza según cupos, presupuesto y distribución y el motivo de lo que no alcanza.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Propuesta }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/asignacion/asignar:
+    post:
+      tags: [Asignación]
+      summary: Asignar el beneficio, de forma individual o por lotes (RF-ASI-02)
+      description: 'Cada caso debe caber en los cupos y el presupuesto (se verifica con la vigencia bloqueada). Si se salta un caso que iba antes en el orden, cada uno exige su causa de no asignación. Aplica RN-01 (una persona, un beneficio). El caso pasa a Asignada, el beneficio a Pendiente de entrega y se notifica por correo (RF-ASI-04).'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [solicitudIds]
+              properties:
+                vigenciaId: { type: integer }
+                solicitudIds: { type: array, items: { type: integer } }
+                omisiones:
+                  type: array
+                  items:
+                    type: object
+                    required: [solicitudId, causa]
+                    properties:
+                      solicitudId: { type: integer }
+                      causa: { type: string, minLength: 10, maxLength: 500 }
+      responses:
+        '201': { description: Casos asignados }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/asignacion/lista-espera:
+    post:
+      tags: [Asignación]
+      summary: Pasar a lista de espera los casos que no alcanzan cupo (RF-ASI-03)
+      description: 'Sin cuerpo, todos los priorizados que no alcanzan; con solicitudIds, solo esos (ninguno puede tener cupo disponible). Se notifica a cada persona.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vigenciaId: { type: integer }
+                solicitudIds: { type: array, items: { type: integer } }
+      responses:
+        '200': { description: Casos movidos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/asignacion/beneficiarios:
+    get:
+      tags: [Asignación]
+      summary: Beneficios asignados de la vigencia, con la trazabilidad de los cupos reasignados
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: estado, in: query, schema: { type: string, enum: [PENDIENTE_ENTREGA, PENDIENTE_ACTIVACION, ACTIVO, BLOQUEADO, SUSPENDIDO, FINALIZADO] } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Beneficiarios }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/alertas:
+    get:
+      tags: [Avisos]
+      summary: Avisos pendientes dirigidos al rol de la persona
+      description: 'Por ejemplo, un cupo liberado para el asignador. Cada aviso va dirigido a quien tenga un permiso.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Avisos }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+  /admin/alertas/{id}/atender:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Avisos]
+      summary: Marcar un aviso como atendido
+      security: [{ bearerInterno: [] }]
+      responses:
+        '204': { description: Atendido }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/asignacion/beneficiarios/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Asignación]
+      summary: 'Detalle de un beneficio: personas, entregas registradas y lo que falta entregar'
+      description: 'El identificador de la tarjeta se devuelve enmascarado: solo se ven los últimos caracteres.'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Detalle del beneficio }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/asignacion/beneficiarios/{id}/entregas:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Asignación]
+      summary: Registrar la entrega de la tarjeta a una persona del beneficio (RF-ASI-05)
+      description: 'multipart/form-data: «datos» (JSON) y el acta firmada en «archivo» (PDF, JPG o PNG). Captura identificador de la tarjeta (único entre beneficios vigentes), tipo de transporte, fecha, receptor (la persona, el cuidador o un tercero con su identificación) y el funcionario que entrega. Con todas las personas entregadas el beneficio queda activo o pendiente de activación, según el parámetro «entrega_activacion_inmediata». Notifica por correo con la tarjeta enmascarada, recomendaciones y causales de revocatoria (RF-ASI-06).'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos, archivo]
+              properties:
+                datos: { type: string, description: 'JSON: rol (PCD | CUIDADOR), tarjetaId, tipoTransporteId, fechaEntrega (AAAA-MM-DD), receptorTipo (PCD | CUIDADOR | TERCERO), receptorNombre / receptorTipoIdentificacionId / receptorNumero (si es un tercero), funcionarioEntrega' }
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { description: Entrega registrada }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/asignacion/beneficiarios/{id}/activar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Asignación]
+      summary: Confirmar la activación de un beneficio pendiente de activación
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                observacion: { type: string, maxLength: 500 }
+      responses:
+        '200': { description: Beneficio activo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/asignacion/entregas/{id}/soporte:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Asignación]
+      summary: Descargar el acta de entrega
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
 components:
   securitySchemes:
@@ -2150,6 +2374,24 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+    EntregaDatos:
+      type: object
+      required: [rol, tarjetaId, tipoTransporteId, fechaEntrega, receptorTipo, funcionarioEntrega]
+      properties:
+        rol: { type: string, enum: [PCD, CUIDADOR] }
+        tarjetaId: { type: string }
+        tipoTransporteId: { type: integer }
+        fechaEntrega: { type: string, format: date }
+        receptorTipo: { type: string, enum: [PCD, CUIDADOR, TERCERO] }
+        receptorNombre: { type: string }
+        receptorTipoIdentificacionId: { type: integer }
+        receptorNumero: { type: string }
+        funcionarioEntrega: { type: string }
+    AsignacionEntrada:
+      type: object
+      required: [solicitudIds]
+      properties:
+        solicitudIds: { type: array, items: { type: integer } }
     MatrizEntrada:
       type: object
       required: [variables]

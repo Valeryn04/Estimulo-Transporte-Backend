@@ -169,6 +169,7 @@ async function crearSolicitud(i: number): Promise<{ texto: string; radicado: str
         epsId: id('eps', 'SANITAS'),
         embarazo: i % 2 === 0 ? 'NO' : 'NO_APLICA',
         recibeSubsidios: false,
+        tipoTransporteId: c.catalogos['tiposTransporte']?.[i % 2]?.id ?? null,
         requiereCuidador: true,
         cuidadorGeneroId: id('generos', 'MASCULINO'),
         cuidadorCelular: '3109876543',

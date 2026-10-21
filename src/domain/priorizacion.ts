@@ -24,7 +24,7 @@ export interface DefinicionMatriz {
 }
 
 /** Estados de los casos que tienen o pueden tener puntaje. */
-export const ESTADOS_PRIORIZABLES = ['VALIDADA', 'PRIORIZADA'] as const;
+export const ESTADOS_PRIORIZABLES = ['VALIDADA', 'PRIORIZADA', 'EN_LISTA_ESPERA'] as const;
 
 /** Las opciones de la variable que sale de la caracterización no se escriben: solo se les pone el puntaje. */
 export const OPCIONES_SUBSIDIOS = ['SIN_SUBSIDIOS', 'CON_SUBSIDIOS'] as const;
