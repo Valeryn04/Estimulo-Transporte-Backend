@@ -1,6 +1,7 @@
 import type { Queryable } from '../db/pool.js';
 
 export type AplicaACruce = 'PCD' | 'CUIDADOR' | 'AMBOS';
+export type AlertaNovedad = 'NINGUNA' | 'PRESENCIA' | 'AUSENCIA';
 
 export interface CargaResumen {
   id: number;
@@ -22,6 +23,9 @@ export interface Estructura {
   columnaIdentificacion: string;
   columnaDetalle: string | null;
   aplicaA: AplicaACruce;
+  /** Qué se alerta a los beneficios vigentes: que aparezcan en el archivo o que no aparezcan. */
+  alertaNovedad: AlertaNovedad;
+  causalCodigo: string | null;
   activo: boolean;
   version: number;
   vigente: CargaResumen | null;
@@ -34,6 +38,8 @@ export interface DatosEstructura {
   columnaIdentificacion: string;
   columnaDetalle: string | null;
   aplicaA: AplicaACruce;
+  alertaNovedad: AlertaNovedad;
+  causalCodigo: string | null;
 }
 
 interface FilaEstructura {
@@ -45,6 +51,8 @@ interface FilaEstructura {
   columna_identificacion: string;
   columna_detalle: string | null;
   aplica_a: AplicaACruce;
+  alerta_novedad: AlertaNovedad;
+  causal_codigo: string | null;
   activo: boolean;
   version: number;
 }
@@ -84,6 +92,8 @@ const mapearEstructura = (f: FilaEstructura, vigente: CargaResumen | null): Estr
   columnaIdentificacion: f.columna_identificacion,
   columnaDetalle: f.columna_detalle,
   aplicaA: f.aplica_a,
+  alertaNovedad: f.alerta_novedad,
+  causalCodigo: f.causal_codigo,
   activo: f.activo,
   version: f.version,
   vigente,
@@ -98,7 +108,7 @@ export interface Coincidencia {
 export const crucesRepo = {
   async listar(db: Queryable): Promise<Estructura[]> {
     const e = await db.query<FilaEstructura>(
-      `SELECT id, codigo, nombre, entidad, descripcion, columna_identificacion, columna_detalle, aplica_a, activo, version
+      `SELECT id, codigo, nombre, entidad, descripcion, columna_identificacion, columna_detalle, aplica_a, alerta_novedad, causal_codigo, activo, version
          FROM cruce_estructuras ORDER BY activo DESC, id`,
     );
     const v = await db.query<FilaCarga & { estructura_id: number }>(
@@ -114,8 +124,9 @@ export const crucesRepo = {
 
   async crear(db: Queryable, codigo: string, d: DatosEstructura): Promise<number> {
     const r = await db.query<{ id: number }>(
-      `INSERT INTO cruce_estructuras (codigo, nombre, entidad, descripcion, columna_identificacion, columna_detalle, aplica_a)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      `INSERT INTO cruce_estructuras (codigo, nombre, entidad, descripcion, columna_identificacion, columna_detalle, aplica_a,
+                                      alerta_novedad, causal_codigo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [
         codigo,
         d.nombre,
@@ -124,6 +135,8 @@ export const crucesRepo = {
         d.columnaIdentificacion,
         d.columnaDetalle,
         d.aplicaA,
+        d.alertaNovedad,
+        d.causalCodigo,
       ],
     );
     return (r.rows[0] as { id: number }).id;
@@ -132,7 +145,7 @@ export const crucesRepo = {
   async actualizar(db: Queryable, id: number, d: DatosEstructura): Promise<void> {
     await db.query(
       `UPDATE cruce_estructuras SET nombre = $2, entidad = $3, descripcion = $4, columna_identificacion = $5,
-              columna_detalle = $6, aplica_a = $7 WHERE id = $1`,
+              columna_detalle = $6, aplica_a = $7, alerta_novedad = $8, causal_codigo = $9 WHERE id = $1`,
       [
         id,
         d.nombre,
@@ -141,6 +154,8 @@ export const crucesRepo = {
         d.columnaIdentificacion,
         d.columnaDetalle,
         d.aplicaA,
+        d.alertaNovedad,
+        d.causalCodigo,
       ],
     );
   },

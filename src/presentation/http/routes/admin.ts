@@ -6,6 +6,7 @@ import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { rutasConfiguracion } from './configuracion.js';
 import { rutasCruces } from './cruces.js';
 import { rutasAsignacion } from './asignacion.js';
+import { rutasNovedades } from './novedades.js';
 import { rutasMatriz } from './matriz.js';
 import { rutasPriorizacion } from './priorizacion.js';
 import { rutasValidacion } from './validacion.js';
@@ -190,9 +191,12 @@ export function rutasAdmin(s: Servicios): Router {
   r.use('/matriz', rutasMatriz(s));
   r.use('/priorizacion', rutasPriorizacion(s));
   r.use('/asignacion', rutasAsignacion(s));
+  r.use('/novedades', rutasNovedades(s));
 
   // ---- avisos internos: cada persona ve los dirigidos a los permisos de su rol
   r.get('/alertas', async (req, res) => {
+    // Los avisos por plazos (bloqueos por levantar, descargos y decisiones vencidos) se generan al consultar.
+    if (req.actor!.permisos.has('novedades.gestionar')) await s.novedades.revisarPlazos();
     res.json({ items: await s.asignacion.alertas(req.actor!) });
   });
 

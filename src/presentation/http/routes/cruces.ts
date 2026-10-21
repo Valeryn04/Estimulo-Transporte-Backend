@@ -25,6 +25,14 @@ const estructuraSchema = z.object({
     .default(null)
     .transform((v) => (v === '' ? null : v)),
   aplicaA: z.enum(['PCD', 'CUIDADOR', 'AMBOS'], { error: 'Aplica a: elija una opción' }),
+  alertaNovedad: z
+    .enum(['NINGUNA', 'PRESENCIA', 'AUSENCIA'], { error: 'Alerta de novedades: elija una opción' })
+    .default('NINGUNA'),
+  causalCodigo: z
+    .string()
+    .regex(/^[A-Z_]{3,60}$/, 'Causal: código inválido')
+    .nullable()
+    .default(null),
 });
 
 /** Archivos de cruce (RF-ADM-05). Se monta bajo /admin/cruces. */
@@ -34,6 +42,10 @@ export function rutasCruces(s: Servicios): Router {
 
   r.get('/', admin, async (_req, res) => {
     res.json({ items: await s.cruces.listar() });
+  });
+
+  r.get('/causales', admin, async (_req, res) => {
+    res.json({ items: await s.cruces.causales() });
   });
 
   r.post('/', admin, async (req, res) => {

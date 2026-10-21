@@ -30,11 +30,18 @@ const servidor = app.listen(env.port, () => {
 
 // Tarea periódica: envío y reintento de los correos pendientes.
 const tareaCorreos = setInterval(() => servicios.correos.despachar(), 30_000);
+// Avisos por plazos de novedades y revocatorias (RF-NOV-01, RF-NOV-02).
+const tareaPlazos = setInterval(() => {
+  void servicios.novedades
+    .revisarPlazos()
+    .catch((e: unknown) => logger.error({ err: e }, 'No se pudieron revisar los plazos'));
+}, 600_000);
 servicios.correos.despachar(); // por si quedaron correos pendientes de una ejecución anterior
 
 async function apagar(senal: string) {
   logger.info({ senal }, 'Apagando');
   clearInterval(tareaCorreos);
+  clearInterval(tareaPlazos);
   servidor.close();
   await servicios.correos.esperarDespachos();
   await deps.pool.end();

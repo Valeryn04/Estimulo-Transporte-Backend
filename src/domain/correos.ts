@@ -18,7 +18,10 @@ export type TipoCorreo =
   | 'ASIGNACION_BENEFICIO'
   | 'LISTA_ESPERA'
   | 'ENTREGA_REGISTRADA'
-  | 'BENEFICIO_ACTIVADO';
+  | 'BENEFICIO_ACTIVADO'
+  | 'NOVEDAD_BENEFICIO'
+  | 'REVOCATORIA_TRASLADO'
+  | 'REVOCATORIA_DECISION';
 
 /** Datos con los que se arma un correo. Cada plantilla usa solo las variables que tiene permitidas. */
 export interface DatosCorreo {
@@ -51,6 +54,12 @@ export interface DatosCorreo {
   recomendacionesUso?: string;
   /** Causales de revocatoria que se recuerdan a la persona (RN-09). */
   causalesRevocatoria?: string;
+  tipoNovedad?: string;
+  causal?: string;
+  fechaEfectiva?: string;
+  observacion?: string;
+  traslado?: string;
+  resultado?: string;
   /** Usuario de ingreso al portal interno. */
   usuario?: string;
   enlaceAcceso?: string;
@@ -134,6 +143,21 @@ export const VARIABLES: Record<string, { descripcion: string; ejemplo: string }>
     descripcion: 'Causales por las que el beneficio puede revocarse',
     ejemplo: '- Uso por una persona distinta a la autorizada',
   },
+  tipo_novedad: { descripcion: 'Tipo de novedad del beneficio', ejemplo: 'Bloqueo temporal' },
+  causal: {
+    descripcion: 'Causal de la novedad o de la revocatoria',
+    ejemplo: 'Reporte de pérdida de la tarjeta',
+  },
+  fecha_efectiva: { descripcion: 'Fecha desde la cual rige la novedad', ejemplo: '20/04/2026' },
+  observacion: {
+    descripcion: 'Observación del funcionario',
+    ejemplo: 'La tarjeta se repondrá cuando se verifique el reporte.',
+  },
+  traslado: {
+    descripcion: 'Razones que se trasladan a la persona en la revocatoria',
+    ejemplo: 'El reporte del operador indica que la tarjeta no se usa desde hace cuatro meses.',
+  },
+  resultado: { descripcion: 'Resultado de la decisión', ejemplo: 'Beneficio revocado' },
   nombre_funcionario: { descripcion: 'Nombre del funcionario', ejemplo: 'Carlos Gómez' },
   usuario: { descripcion: 'Usuario para ingresar al portal interno', ejemplo: 'cgomez' },
   contrasena_temporal: {
@@ -179,6 +203,12 @@ export function valoresDeCorreo(d: DatosCorreo): Record<string, string> {
     instrucciones_entrega: d.instruccionesEntrega,
     fecha_entrega: d.fechaEntrega,
     tarjeta_enmascarada: d.tarjetaEnmascarada,
+    tipo_novedad: d.tipoNovedad,
+    causal: d.causal,
+    fecha_efectiva: d.fechaEfectiva,
+    observacion: d.observacion,
+    traslado: d.traslado,
+    resultado: d.resultado,
     tipo_transporte: d.tipoTransporte,
     recomendaciones_uso: d.recomendacionesUso,
     causales_revocatoria: d.causalesRevocatoria,

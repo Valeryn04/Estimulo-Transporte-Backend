@@ -6,6 +6,7 @@ import { ARCHIVO_MAX_MB_ABSOLUTO } from '../domain/limites.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
+import { novedadesRepo } from '../infrastructure/repositories/novedades.js';
 import { catalogosRepo } from '../infrastructure/repositories/catalogos.js';
 import {
   crucesRepo,
@@ -41,6 +42,9 @@ function traducirUnicidad(error: unknown): never {
  * para las alertas de la validación (RF-VAL-03). Las identificaciones del archivo se guardan como huella (HMAC).
  */
 export class ServicioCruces {
+  /** Se ejecuta después de cada carga: genera las alertas de novedades. Lo conecta el contenedor. */
+  alCargar?: (estructura: Estructura, cargaId: number, actorId: number) => Promise<number>;
+
   constructor(private readonly deps: Dependencias) {}
 
   huella(identificacion: string): string {
@@ -58,6 +62,11 @@ export class ServicioCruces {
     return (await crucesRepo.listar(this.deps.pool))
       .filter((e) => e.activo)
       .map((e) => ({ codigo: e.codigo, nombre: e.nombre }));
+  }
+
+  /** Causales de revocatoria que puede sugerir una estructura de cruce. */
+  causales() {
+    return novedadesRepo.causalesConCodigo(this.deps.pool, 'CAUSAL_REVOCATORIA');
   }
 
   async versiones(id: number) {
@@ -86,7 +95,20 @@ export class ServicioCruces {
     };
   }
 
-  private validar(d: DatosEstructura): void {
+  private async validar(d: DatosEstructura): Promise<void> {
+    if (d.alertaNovedad !== 'NINGUNA') {
+      const causal = d.causalCodigo
+        ? await novedadesRepo.causalPorCodigo(this.deps.pool, 'CAUSAL_REVOCATORIA', d.causalCodigo)
+        : null;
+      if (!causal) {
+        throw errorValidacion([
+          {
+            campo: 'causalCodigo',
+            mensaje: 'Causal: elija la causal de revocatoria que sugiere la alerta',
+          },
+        ]);
+      }
+    }
     if (
       d.columnaDetalle !== null &&
       d.columnaDetalle.trim().toUpperCase() === d.columnaIdentificacion.trim().toUpperCase()
@@ -101,7 +123,7 @@ export class ServicioCruces {
   }
 
   async crear(actor: Actor, d: DatosEstructura, ctx: ContextoPeticion): Promise<Estructura> {
-    this.validar(d);
+    await this.validar(d);
     const codigo = codigoDesdeNombre(d.nombre, '', 60);
     const id = await withTransaction(this.deps.pool, async (tx) => {
       await fijarActor(tx, actor.id);
@@ -131,7 +153,7 @@ export class ServicioCruces {
     d: DatosEstructura,
     ctx: ContextoPeticion,
   ): Promise<Estructura> {
-    this.validar(d);
+    await this.validar(d);
     await withTransaction(this.deps.pool, async (tx) => {
       await fijarActor(tx, actor.id);
       const actual = await crucesRepo.porId(tx, id);
@@ -154,6 +176,8 @@ export class ServicioCruces {
           columnaIdentificacion: actual.columnaIdentificacion,
           columnaDetalle: actual.columnaDetalle,
           aplicaA: actual.aplicaA,
+          alertaNovedad: actual.alertaNovedad,
+          causalCodigo: actual.causalCodigo,
         },
         valorNuevo: d,
         ip: ctx.ip,
@@ -266,9 +290,11 @@ export class ServicioCruces {
       });
       return nueva;
     });
-    return (await crucesRepo.carga(this.deps.pool, cargaId)) as NonNullable<
+    const carga = (await crucesRepo.carga(this.deps.pool, cargaId)) as NonNullable<
       Awaited<ReturnType<typeof crucesRepo.carga>>
     >;
+    const alertas = this.alCargar ? await this.alCargar(estructura, cargaId, actor.id) : 0;
+    return { ...carga, alertasGeneradas: alertas };
   }
 
   /**

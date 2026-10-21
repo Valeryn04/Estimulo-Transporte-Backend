@@ -2353,6 +2353,261 @@ paths:
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/novedades/causales:
+    get:
+      tags: [Novedades]
+      summary: Causales de bloqueo y de revocatoria
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Causales }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/cruces/causales:
+    get:
+      tags: [Cruces]
+      summary: Causales de revocatoria que puede sugerir una estructura de cruce
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Causales (código y nombre) }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/novedades/resumen:
+    get:
+      tags: [Novedades]
+      summary: 'Beneficios con su estado y novedades'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: estado, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: pagina, in: query, schema: { type: integer } }
+        - { name: tamano, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Resumen }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/novedades/beneficios/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Novedades]
+      summary: 'Expediente de novedades de un beneficio: bloqueos, levantamientos y revocatorias'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Expediente }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/novedades/beneficios/{id}/novedades:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Bloquear, suspender o reactivar un beneficio (RF-NOV-01)'
+      description: 'multipart/form-data. Exige causal (catálogo), fecha efectiva, evidencia y responsable; comunica a la persona por correo. Los bloqueos pueden traer una fecha de levantamiento programada, al cumplirse la cual se alerta al gestor. El historial no se borra.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos, archivo]
+              properties:
+                datos: { type: string, description: 'JSON: tipo (BLOQUEO | SUSPENSION | LEVANTAMIENTO), causalId, fechaEfectiva, observacion, levantamientoProgramado?' }
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { description: Creado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/novedades/{id}/evidencia:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Novedades]
+      summary: 'Descargar la evidencia de una novedad'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/novedades/beneficios/{id}/revocatorias:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Iniciar la revocatoria de un beneficio (RF-NOV-02)'
+      description: 'multipart/form-data: causal de revocatoria y evidencia que la sustenta. Solo una revocatoria en curso por beneficio.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos, archivo]
+              properties:
+                datos: { type: string, description: 'JSON: causalId, descripcion' }
+                archivo: { type: string, format: binary }
+      responses:
+        '201': { description: Creado }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/revocatorias:
+    get:
+      tags: [Novedades]
+      summary: 'Revocatorias'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [INICIADA, EN_TRASLADO, CON_DESCARGOS, DECIDIDA] } }
+        - { name: pagina, in: query, schema: { type: integer } }
+        - { name: tamano, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Revocatorias }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/novedades/revocatorias/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Novedades]
+      summary: 'Revocatoria con su línea de tiempo y lo que sigue'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Revocatoria }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/novedades/revocatorias/{id}/traslado:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Registrar el traslado de las razones a la persona'
+      description: 'Envía el correo de traslado y abre el plazo de descargos (parámetro plazo_descargos_dias).'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos]
+              properties:
+                datos: { type: string, description: 'JSON: texto' }
+                archivo: { type: string, format: binary }
+      responses:
+        '200': { description: Revocatoria }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/revocatorias/{id}/descargos:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Registrar los descargos recibidos, o que venció el plazo sin ellos'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos]
+              properties:
+                datos: { type: string, description: 'JSON: texto, sinDescargos (solo con el plazo vencido)' }
+                archivo: { type: string, format: binary }
+      responses:
+        '200': { description: Revocatoria }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/revocatorias/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Registrar el acto administrativo que decide la revocatoria'
+      description: 'Solo con el traslado hecho y los descargos recibidos (o el plazo vencido). Al revocar, el beneficio finaliza y el cupo queda libre para reasignar. Exige número del acto, motivación y el archivo del acto.'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos, archivo]
+              properties:
+                datos: { type: string, description: 'JSON: resultado (REVOCAR | ARCHIVAR), motivacion, numeroActo' }
+                archivo: { type: string, format: binary }
+      responses:
+        '200': { description: Revocatoria }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
+  /admin/novedades/revocatorias/eventos/{id}/evidencia:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Novedades]
+      summary: 'Descargar el archivo de una etapa de la revocatoria'
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Archivo }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/novedades/alertas-cruce:
+    get:
+      tags: [Novedades]
+      summary: 'Alertas de los cruces periódicos (RF-NOV-03)'
+      description: 'Coincidencias de los archivos de defunciones, uso de tarjetas y beneficios incompatibles con los beneficios vigentes. Una alerta nunca modifica el beneficio.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [PENDIENTE, DESCARTADA, EN_TRAMITE] } }
+        - { name: pagina, in: query, schema: { type: integer } }
+        - { name: tamano, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Alertas }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /admin/novedades/alertas-cruce/{id}/analizar:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Novedades]
+      summary: 'Analizar una alerta de cruce: descartarla o iniciar la revocatoria'
+      security: [{ bearerInterno: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [datos]
+              properties:
+                datos: { type: string, description: 'JSON: accion (DESCARTAR | INICIAR_REVOCATORIA), observacion; la evidencia es obligatoria al iniciar la revocatoria' }
+                archivo: { type: string, format: binary }
+      responses:
+        '200': { description: Alerta }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+        '422': { $ref: '#/components/responses/Validacion' }
 
 components:
   securitySchemes:

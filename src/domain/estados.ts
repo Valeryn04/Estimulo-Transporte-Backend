@@ -186,4 +186,7 @@ export const NOMBRE_COMUNICACION: Record<string, string> = {
   LISTA_ESPERA: 'Caso en lista de espera',
   ENTREGA_REGISTRADA: 'Entrega del medio de transporte',
   BENEFICIO_ACTIVADO: 'Beneficio activado',
+  NOVEDAD_BENEFICIO: 'Novedad del beneficio',
+  REVOCATORIA_TRASLADO: 'Traslado de la revocatoria',
+  REVOCATORIA_DECISION: 'Decisión de la revocatoria',
 };

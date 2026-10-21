@@ -282,10 +282,13 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'entrega_instrucciones',
         'entrega_lugar',
         'entrega_recomendaciones',
+        'inactividad_meses',
         'login_bloqueo_minutos',
         'login_max_intentos',
         'max_rondas_subsanacion',
         'otp_vigencia_minutos',
+        'plazo_decision_dias',
+        'plazo_descargos_dias',
         'plazo_recursos_dias',
         'plazo_subsanacion_dias',
         'reenvio_verificacion_minutos',
@@ -301,7 +304,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect(por('otp_vigencia_minutos')).toMatchObject({ minimo: 5, maximo: 15 });
       expect(por('sesion_maxima_horas')).toMatchObject({ minimo: 1, maximo: 12 });
       // Los parámetros de funciones que aún no existen no se muestran ni se pueden cambiar.
-      for (const clave of ['plazo_descargos_dias', 'meta_beneficiarios']) {
+      for (const clave of ['meta_beneficiarios']) {
         expect(por(clave), clave).toBeUndefined();
         const r = await post(`/parametros/${clave}/versiones`, {
           valor: '5',
