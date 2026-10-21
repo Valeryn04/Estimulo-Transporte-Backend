@@ -183,6 +183,10 @@ export class ServicioSeguimiento {
     };
   }
 
+  accionesBitacora() {
+    return bitacoraConsultaRepo.acciones(this.deps.pool);
+  }
+
   modulosBitacora() {
     return bitacoraConsultaRepo.modulos(this.deps.pool);
   }

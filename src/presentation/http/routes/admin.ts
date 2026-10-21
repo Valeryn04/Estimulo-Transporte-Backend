@@ -23,12 +23,12 @@ const rolSchema = z.object({
     .string({ error: 'Nombre del rol: escríbalo' })
     .trim()
     .min(3, 'Nombre del rol: escriba al menos 3 caracteres')
-    .max(60, 'Nombre del rol: máximo 60 caracteres'),
+    .max(40, 'Nombre del rol: máximo 40 caracteres'),
   descripcion: z
     .string({ error: 'Descripción: escríbala' })
     .trim()
     .min(3, 'Descripción: escriba al menos 3 caracteres')
-    .max(250, 'Descripción: máximo 250 caracteres'),
+    .max(150, 'Descripción: máximo 150 caracteres'),
   permisos: z
     .array(z.string().regex(/^[a-z_]+(\.[a-z_]+)+$/, 'Permisos: permiso inválido'), {
       error: 'Permisos: envíe la lista de permisos',

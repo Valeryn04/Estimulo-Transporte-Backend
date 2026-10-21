@@ -118,6 +118,7 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
       expect(pag.body.items).toHaveLength(2);
       expect((await get(control, '/bitacora?desde=ayer')).status).toBe(422);
       expect((await get(control, '/bitacora/modulos')).body.items).toContain('asignacion');
+      expect((await get(control, '/bitacora/acciones')).body.items).toContain('BENEFICIO_ASIGNADO');
     });
 
     it('consultar la bitácora queda registrado y quien no ve datos sensibles no recibe los valores', async () => {

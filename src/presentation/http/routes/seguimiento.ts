@@ -117,6 +117,10 @@ export function rutasSeguimiento(s: Servicios): Router {
       .send(a.archivo);
   });
 
+  r.get('/bitacora/acciones', requierePermisos('bitacora.ver'), async (_req, res) => {
+    res.json({ items: await s.seguimiento.accionesBitacora() });
+  });
+
   r.get('/bitacora/modulos', requierePermisos('bitacora.ver'), async (_req, res) => {
     res.json({ items: await s.seguimiento.modulosBitacora() });
   });

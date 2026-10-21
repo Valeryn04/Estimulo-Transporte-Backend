@@ -3005,6 +3005,15 @@ paths:
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409': { $ref: '#/components/responses/ReglaDeNegocio' }
+  /admin/bitacora/acciones:
+    get:
+      tags: [Seguimiento]
+      summary: Acciones que aparecen en la bitácora
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Lista de acciones }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
 
 components:
   securitySchemes:
@@ -3026,6 +3035,7 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+
 
 
 

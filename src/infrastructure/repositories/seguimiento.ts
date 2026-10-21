@@ -101,6 +101,13 @@ export const bitacoraConsultaRepo = {
     };
   },
 
+  async acciones(db: Queryable): Promise<string[]> {
+    const r = await db.query<{ accion: string }>(
+      `SELECT DISTINCT accion FROM bitacora ORDER BY accion`,
+    );
+    return r.rows.map((x) => x.accion);
+  },
+
   async modulos(db: Queryable): Promise<string[]> {
     const r = await db.query<{ modulo: string }>(
       `SELECT DISTINCT modulo FROM bitacora ORDER BY modulo`,
