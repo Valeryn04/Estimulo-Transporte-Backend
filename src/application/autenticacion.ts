@@ -298,10 +298,17 @@ export class ServicioAutenticacion {
     return this.abrirSesion(u, cargado, u.debeCambiarPassword);
   }
 
-  async cambiarPassword(actor: Actor, actual: string, nueva: string, ctx: ContextoPeticion) {
+  async cambiarPassword(
+    actor: Actor,
+    actual: string,
+    nueva: string,
+    ctx: ContextoPeticion,
+    /** Cambio obligatorio con la contraseña temporal: no se vuelve a pedir la actual. */
+    forzado = false,
+  ) {
     const { pool } = this.deps;
     const u = await usuariosRepo.porId(pool, actor.id);
-    if (!u || !(await verificarPassword(u.passwordHash, actual))) {
+    if (!u || (!forzado && !(await verificarPassword(u.passwordHash, actual)))) {
       throw errorValidacion([
         { campo: 'passwordActual', mensaje: 'Contraseña actual: no es correcta' },
       ]);

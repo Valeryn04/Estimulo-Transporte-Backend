@@ -172,6 +172,23 @@ describe('autenticación de usuarios internos (RNF-05)', () => {
     expect((await request(e.app).get(`${api}/admin/usuarios`).set(auth(ok.body))).status).toBe(200);
   });
 
+  it('con la contraseña temporal no se pide la actual, pero un cambio voluntario sí', async () => {
+    const temporal = await crearCuenta(e, 'ADMINISTRADOR', { debeCambiar: true });
+    const ok = await request(e.app)
+      .post(`${api}/auth/cambiar-password`)
+      .set(auth(temporal))
+      .send({ passwordNueva: 'Definitiva#2026ab' });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.perfil.debeCambiarPassword).toBe(false);
+    // Ya con contraseña definitiva, cambiarla exige la actual.
+    const sin = await request(e.app)
+      .post(`${api}/auth/cambiar-password`)
+      .set(auth(ok.body))
+      .send({ passwordNueva: 'Otra#Definitiva2026' });
+    expect(sin.status).toBe(422);
+    expect(sin.body.error.errores[0].campo).toBe('passwordActual');
+  });
+
   it('un usuario sin rol no puede ingresar', async () => {
     const u = await crearUsuarioBD(e, 'ANALISTA');
     await e.pool.query(`DELETE FROM usuario_rol WHERE usuario_id = $1`, [u.id]);

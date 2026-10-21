@@ -514,9 +514,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [passwordActual, passwordNueva]
+              required: [passwordNueva]
               properties:
-                passwordActual: { type: string }
+                passwordActual:
+                  {
+                    type: string,
+                    description: 'Obligatoria en un cambio voluntario; no se pide cuando la contraseña es temporal o venció.',
+                  }
                 passwordNueva:
                   {
                     type: string,
@@ -2007,7 +2011,11 @@ paths:
         - { name: vigenciaId, in: query, schema: { type: integer } }
         - { name: localidadId, in: query, schema: { type: integer } }
         - { name: transporteId, in: query, schema: { type: integer } }
-        - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+        - {
+            name: poblacion,
+            in: query,
+            schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] },
+          }
         - { name: q, in: query, schema: { type: string } }
         - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
         - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
@@ -2076,7 +2084,11 @@ paths:
               type: object
               required: [ajuste, justificacion, archivo]
               properties:
-                ajuste: { type: number, description: 'Puntos a sumar o restar, entre -100 y 100, distinto de cero' }
+                ajuste:
+                  {
+                    type: number,
+                    description: 'Puntos a sumar o restar, entre -100 y 100, distinto de cero',
+                  }
                 justificacion: { type: string, minLength: 20, maxLength: 2000 }
                 archivo: { type: string, format: binary }
       responses:
@@ -2091,7 +2103,11 @@ paths:
       summary: Excepciones propuestas y decididas
       security: [{ bearerInterno: [] }]
       parameters:
-        - { name: estado, in: query, schema: { type: string, enum: [PROPUESTA, APROBADA, RECHAZADA] } }
+        - {
+            name: estado,
+            in: query,
+            schema: { type: string, enum: [PROPUESTA, APROBADA, RECHAZADA] },
+          }
         - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
         - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
       responses:
@@ -2137,7 +2153,12 @@ paths:
       description: 'Cupos totales, ocupados, liberados y disponibles; valor del estímulo; presupuesto total, comprometido y disponible; y la distribución por localidad y transporte con lo ocupado de cada una.'
       security: [{ bearerInterno: [] }]
       parameters:
-        - { name: vigenciaId, in: query, schema: { type: integer }, description: 'Por defecto, la vigencia activa' }
+        - {
+            name: vigenciaId,
+            in: query,
+            schema: { type: integer },
+            description: 'Por defecto, la vigencia activa',
+          }
       responses:
         '200': { description: Resumen de cupos y presupuesto }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2156,7 +2177,11 @@ paths:
               type: object
               required: [datos]
               properties:
-                datos: { type: string, description: 'JSON: cuposTotales?, valorEstimulo?, presupuestoTotal?, distribucionLocalidad? [{itemId, cupos}], distribucionTransporte? [{itemId, cupos}], motivo' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: cuposTotales?, valorEstimulo?, presupuestoTotal?, distribucionLocalidad? [{itemId, cupos}], distribucionTransporte? [{itemId, cupos}], motivo',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '200': { description: Resumen actualizado }
@@ -2256,7 +2281,23 @@ paths:
       security: [{ bearerInterno: [] }]
       parameters:
         - { name: vigenciaId, in: query, schema: { type: integer } }
-        - { name: estado, in: query, schema: { type: string, enum: [PENDIENTE_ENTREGA, PENDIENTE_ACTIVACION, ACTIVO, BLOQUEADO, SUSPENDIDO, FINALIZADO] } }
+        - {
+            name: estado,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum:
+                  [
+                    PENDIENTE_ENTREGA,
+                    PENDIENTE_ACTIVACION,
+                    ACTIVO,
+                    BLOQUEADO,
+                    SUSPENDIDO,
+                    FINALIZADO,
+                  ],
+              },
+          }
         - { name: q, in: query, schema: { type: string } }
         - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
         - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
@@ -2313,7 +2354,11 @@ paths:
               type: object
               required: [datos, archivo]
               properties:
-                datos: { type: string, description: 'JSON: rol (PCD | CUIDADOR), tarjetaId, tipoTransporteId, fechaEntrega (AAAA-MM-DD), receptorTipo (PCD | CUIDADOR | TERCERO), receptorNombre / receptorTipoIdentificacionId / receptorNumero (si es un tercero), funcionarioEntrega' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: rol (PCD | CUIDADOR), tarjetaId, tipoTransporteId, fechaEntrega (AAAA-MM-DD), receptorTipo (PCD | CUIDADOR | TERCERO), receptorNombre / receptorTipoIdentificacionId / receptorNumero (si es un tercero), funcionarioEntrega',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '201': { description: Entrega registrada }
@@ -2414,7 +2459,11 @@ paths:
               type: object
               required: [datos, archivo]
               properties:
-                datos: { type: string, description: 'JSON: tipo (BLOQUEO | SUSPENSION | LEVANTAMIENTO), causalId, fechaEfectiva, observacion, levantamientoProgramado?' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: tipo (BLOQUEO | SUSPENSION | LEVANTAMIENTO), causalId, fechaEfectiva, observacion, levantamientoProgramado?',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '201': { description: Creado }
@@ -2466,7 +2515,11 @@ paths:
       summary: 'Revocatorias'
       security: [{ bearerInterno: [] }]
       parameters:
-        - { name: estado, in: query, schema: { type: string, enum: [INICIADA, EN_TRASLADO, CON_DESCARGOS, DECIDIDA] } }
+        - {
+            name: estado,
+            in: query,
+            schema: { type: string, enum: [INICIADA, EN_TRASLADO, CON_DESCARGOS, DECIDIDA] },
+          }
         - { name: pagina, in: query, schema: { type: integer } }
         - { name: tamano, in: query, schema: { type: integer } }
       responses:
@@ -2525,7 +2578,11 @@ paths:
               type: object
               required: [datos]
               properties:
-                datos: { type: string, description: 'JSON: texto, sinDescargos (solo con el plazo vencido)' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: texto, sinDescargos (solo con el plazo vencido)',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '200': { description: Revocatoria }
@@ -2550,7 +2607,11 @@ paths:
               type: object
               required: [datos, archivo]
               properties:
-                datos: { type: string, description: 'JSON: resultado (REVOCAR | ARCHIVAR), motivacion, numeroActo' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: resultado (REVOCAR | ARCHIVAR), motivacion, numeroActo',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '200': { description: Revocatoria }
@@ -2578,7 +2639,11 @@ paths:
       description: 'Coincidencias de los archivos de defunciones, uso de tarjetas y beneficios incompatibles con los beneficios vigentes. Una alerta nunca modifica el beneficio.'
       security: [{ bearerInterno: [] }]
       parameters:
-        - { name: estado, in: query, schema: { type: string, enum: [PENDIENTE, DESCARTADA, EN_TRAMITE] } }
+        - {
+            name: estado,
+            in: query,
+            schema: { type: string, enum: [PENDIENTE, DESCARTADA, EN_TRAMITE] },
+          }
         - { name: pagina, in: query, schema: { type: integer } }
         - { name: tamano, in: query, schema: { type: integer } }
       responses:
@@ -2600,7 +2665,11 @@ paths:
               type: object
               required: [datos]
               properties:
-                datos: { type: string, description: 'JSON: accion (DESCARTAR | INICIAR_REVOCATORIA), observacion; la evidencia es obligatoria al iniciar la revocatoria' }
+                datos:
+                  {
+                    type: string,
+                    description: 'JSON: accion (DESCARTAR | INICIAR_REVOCATORIA), observacion; la evidencia es obligatoria al iniciar la revocatoria',
+                  }
                 archivo: { type: string, format: binary }
       responses:
         '200': { description: Alerta }
@@ -2726,7 +2795,11 @@ paths:
               required: [token, respuestas]
               properties:
                 token: { type: string }
-                respuestas: { type: object, description: 'Mapa idPregunta → valor (número en escala, texto de la opción o texto libre)' }
+                respuestas:
+                  {
+                    type: object,
+                    description: 'Mapa idPregunta → valor (número en escala, texto de la opción o texto libre)',
+                  }
       responses:
         '201': { description: Respuesta registrada }
         '404': { $ref: '#/components/responses/NoEncontrado' }
@@ -2739,14 +2812,14 @@ paths:
       description: 'Filtros por radicado, usuario, módulo, acción y rango de fechas. Los valores anterior y nuevo solo los ven quienes tienen permiso sobre datos sensibles. Cada consulta queda registrada.'
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: radicado, in: query, schema: { type: string } }
-      - { name: usuario, in: query, schema: { type: string } }
-      - { name: modulo, in: query, schema: { type: string } }
-      - { name: accion, in: query, schema: { type: string } }
-      - { name: desde, in: query, schema: { type: string, format: date } }
-      - { name: hasta, in: query, schema: { type: string, format: date } }
-      - { name: pagina, in: query, schema: { type: integer } }
-      - { name: tamano, in: query, schema: { type: integer } }
+        - { name: radicado, in: query, schema: { type: string } }
+        - { name: usuario, in: query, schema: { type: string } }
+        - { name: modulo, in: query, schema: { type: string } }
+        - { name: accion, in: query, schema: { type: string } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: pagina, in: query, schema: { type: integer } }
+        - { name: tamano, in: query, schema: { type: integer } }
       responses:
         '200': { description: Página de eventos de bitácora }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2767,7 +2840,7 @@ paths:
       summary: Buscar expedientes por radicado, documento o nombre (RF-SEG-03)
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: q, in: query, required: true, schema: { type: string, minLength: 3 } }
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 3 } }
       responses:
         '200': { description: Coincidencias }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2793,10 +2866,14 @@ paths:
       description: 'Embudo de etapas, novedades, avance contra la meta, ejecución presupuestal, tiempos promedio por etapa y satisfacción. Filtros por vigencia, localidad, población y etapa (estados separados por coma).'
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: vigenciaId, in: query, schema: { type: integer } }
-      - { name: localidadId, in: query, schema: { type: integer } }
-      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
-      - { name: etapa, in: query, schema: { type: string } }
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: localidadId, in: query, schema: { type: integer } }
+        - {
+            name: poblacion,
+            in: query,
+            schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] },
+          }
+        - { name: etapa, in: query, schema: { type: string } }
       responses:
         '200': { description: Indicadores }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2830,12 +2907,16 @@ paths:
       description: 'Filtros comunes: vigencia, rango de fechas, localidad, estado y tipo de población. Devuelve hasta 200 filas y el total.'
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: vigenciaId, in: query, schema: { type: integer } }
-      - { name: desde, in: query, schema: { type: string, format: date } }
-      - { name: hasta, in: query, schema: { type: string, format: date } }
-      - { name: localidadId, in: query, schema: { type: integer } }
-      - { name: estado, in: query, schema: { type: string } }
-      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: localidadId, in: query, schema: { type: integer } }
+        - { name: estado, in: query, schema: { type: string } }
+        - {
+            name: poblacion,
+            in: query,
+            schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] },
+          }
       responses:
         '200': { description: Tabla del reporte }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2850,13 +2931,17 @@ paths:
       description: 'El archivo lleva los filtros en el encabezado y todas las filas. La exportación queda registrada en el historial y en la bitácora.'
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: formato, in: query, required: true, schema: { type: string, enum: [XLSX, PDF] } }
-      - { name: vigenciaId, in: query, schema: { type: integer } }
-      - { name: desde, in: query, schema: { type: string, format: date } }
-      - { name: hasta, in: query, schema: { type: string, format: date } }
-      - { name: localidadId, in: query, schema: { type: integer } }
-      - { name: estado, in: query, schema: { type: string } }
-      - { name: poblacion, in: query, schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] } }
+        - { name: formato, in: query, required: true, schema: { type: string, enum: [XLSX, PDF] } }
+        - { name: vigenciaId, in: query, schema: { type: integer } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: localidadId, in: query, schema: { type: integer } }
+        - { name: estado, in: query, schema: { type: string } }
+        - {
+            name: poblacion,
+            in: query,
+            schema: { type: string, enum: [CON_CUIDADOR, SIN_CUIDADOR] },
+          }
       responses:
         '200': { description: Archivo }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -2869,11 +2954,11 @@ paths:
       description: 'Eventos de la bitácora sin datos personales: el caso se identifica con una referencia irreversible. Paginación incremental con despuesDe. Formato json o csv.'
       security: [{ bearerInterno: [] }]
       parameters:
-      - { name: desde, in: query, schema: { type: string, format: date } }
-      - { name: hasta, in: query, schema: { type: string, format: date } }
-      - { name: despuesDe, in: query, schema: { type: integer } }
-      - { name: limite, in: query, schema: { type: integer } }
-      - { name: formato, in: query, schema: { type: string, enum: [json, csv] } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: despuesDe, in: query, schema: { type: integer } }
+        - { name: limite, in: query, schema: { type: integer } }
+        - { name: formato, in: query, schema: { type: string, enum: [json, csv] } }
       responses:
         '200': { description: Eventos }
         '401': { $ref: '#/components/responses/NoAutenticado' }
@@ -3035,11 +3120,6 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
-
-
-
-
-
     EncuestaEntrada:
       type: object
       required: [titulo, desde, hasta, preguntas]
@@ -3095,7 +3175,12 @@ components:
               codigo: { type: string }
               nombre: { type: string }
               descripcion: { type: string }
-              origen: { type: string, enum: [VALIDADOR, SUBSIDIOS], description: 'VALIDADOR lo registra el validador; SUBSIDIOS sale de la caracterización' }
+              origen:
+                {
+                  type: string,
+                  enum: [VALIDADOR, SUBSIDIOS],
+                  description: 'VALIDADOR lo registra el validador; SUBSIDIOS sale de la caracterización',
+                }
               peso: { type: number }
               opciones:
                 type: array
@@ -3119,8 +3204,14 @@ components:
         nombre: { type: string }
         entidad: { type: string }
         descripcion: { type: string }
-        columnaIdentificacion: { type: string, description: 'Encabezado de la columna con el número de identificación' }
-        columnaDetalle: { type: string, nullable: true, description: 'Encabezado de la columna que se muestra en la alerta' }
+        columnaIdentificacion:
+          { type: string, description: 'Encabezado de la columna con el número de identificación' }
+        columnaDetalle:
+          {
+            type: string,
+            nullable: true,
+            description: 'Encabezado de la columna que se muestra en la alerta',
+          }
         aplicaA: { type: string, enum: [PCD, CUIDADOR, AMBOS] }
     Salud:
       type: object

@@ -28,10 +28,8 @@ const loginSchema = z.object({
 });
 
 const cambioSchema = z.object({
-  passwordActual: z
-    .string({ error: 'Contraseña actual: escríbala' })
-    .min(1, 'Contraseña actual: escríbala')
-    .max(128),
+  // Con la contraseña temporal (primer ingreso o vencida) no se pide: la persona acaba de escribirla para entrar.
+  passwordActual: z.string({ error: 'Contraseña actual: escríbala' }).max(128).default(''),
   passwordNueva: z.string({ error: 'Nueva contraseña: escríbala' }).max(128),
 });
 
@@ -88,6 +86,7 @@ export function rutasAuth(
         d.passwordActual,
         d.passwordNueva,
         contexto(req),
+        req.debeCambiarPassword === true,
       ),
     );
   });
