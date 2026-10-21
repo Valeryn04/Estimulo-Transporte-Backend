@@ -69,7 +69,7 @@ function traducirUnicidad(error: unknown): never {
       throw errorValidacion([
         {
           campo: 'correo',
-          mensaje: 'Correo: ya está asociado a otra cuenta (las cuentas son personales)',
+          mensaje: 'Correo: ya está registrado en otra cuenta',
         },
       ]);
     }
@@ -134,10 +134,9 @@ export class ServicioUsuarios {
       d.correo ? usuariosRepo.quienUsa(pool, 'correo', d.correo, excluir) : null,
     ]);
     return {
-      usuario: d.usuario ? { disponible: !usuario, usadoPor: usuario?.usuario ?? null } : null,
-      correo: d.correo
-        ? { disponible: !correo, usadoPor: correo?.usuario ?? null, estado: correo?.estado ?? null }
-        : null,
+      // Solo se dice si está libre: nunca quién más lo usa.
+      usuario: d.usuario ? { disponible: !usuario } : null,
+      correo: d.correo ? { disponible: !correo } : null,
     };
   }
 

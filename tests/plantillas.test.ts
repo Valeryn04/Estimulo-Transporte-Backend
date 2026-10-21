@@ -103,7 +103,14 @@ describe('plantillas de correo configurables (RF-COM-02, RNF-12)', () => {
           'VALIDACION_SUBSANACION',
         ]),
       );
-      expect(lista.every((p) => p.version === 1)).toBe(true);
+      // Las cuentas de funcionarios tienen una segunda versión: solo llevan la contraseña temporal, sin el usuario.
+      expect(
+        lista.every((p) =>
+          ['CUENTA_CREADA', 'PASSWORD_RESTABLECIDA'].includes(p.codigo)
+            ? p.version === 2
+            : p.version === 1,
+        ),
+      ).toBe(true);
     });
 
     it('cada plantilla trae sus variables (con su descripción y si son obligatorias) y todas incluyen la aclaración de que no es aprobación', async () => {

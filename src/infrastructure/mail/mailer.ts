@@ -4,6 +4,8 @@ export interface MensajeCorreo {
   to: string;
   subject: string;
   text: string;
+  /** Versión con estilo del mismo mensaje; quien no la muestre lee el texto. */
+  html?: string;
 }
 
 export interface ResultadoEnvio {

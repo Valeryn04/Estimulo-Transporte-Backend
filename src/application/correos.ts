@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { correoEnHtml } from '../domain/correo-html.js';
 import {
   MARCADOR_CONTRASENA,
   renderizar,
@@ -126,10 +127,13 @@ export class ServicioCorreos {
       if (lote.length === 0) return enviados;
       for (const c of lote) {
         try {
+          const secreto = this.secretoDe(c.secretos);
+          const texto = secreto ? c.cuerpo.split(MARCADOR_CONTRASENA).join(secreto) : c.cuerpo;
           const r = await mailer.enviar({
             to: c.destinatario,
             subject: c.asunto,
-            text: this.textoParaEnviar(c.cuerpo, c.secretos),
+            text: texto,
+            html: correoEnHtml(c.asunto, texto, { destacar: secreto ? [secreto] : [] }),
           });
           await correosRepo.marcarEnviado(pool, c.id, r.messageId);
           enviados += 1;
@@ -152,13 +156,10 @@ export class ServicioCorreos {
     }
   }
 
-  /** Pone la contraseña temporal (descifrada) en el lugar del marcador; solo existe en memoria al enviar. */
-  private textoParaEnviar(cuerpo: string, secretos: Buffer | null): string {
-    if (!secretos) return cuerpo;
-    const { contrasenaTemporal } = this.cipher.descifrarJson<{ contrasenaTemporal: string }>(
-      secretos,
-    );
-    return cuerpo.split(MARCADOR_CONTRASENA).join(contrasenaTemporal);
+  /** La contraseña temporal descifrada; solo existe en memoria mientras el correo sale. */
+  private secretoDe(secretos: Buffer | null): string | null {
+    if (!secretos) return null;
+    return this.cipher.descifrarJson<{ contrasenaTemporal: string }>(secretos).contrasenaTemporal;
   }
 
   /** Reporte de entrega o rebote del proveedor de correo (RNF-13). */

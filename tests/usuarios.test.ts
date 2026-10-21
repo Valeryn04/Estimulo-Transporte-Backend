@@ -41,8 +41,16 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
   /** La contraseña temporal solo existe en el correo que recibe la persona: se lee del último correo enviado. */
   const contrasenaDelCorreo = async () => {
     await e.servicios.correos.esperarDespachos();
-    const m = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text);
+    const m = /contraseña temporal es:\s+(\S+)/.exec(e.mailer.ultimo().text);
     expect(m, 'el correo debe traer la contraseña temporal').not.toBeNull();
+    // El correo lleva solo la contraseña: nunca el usuario.
+    expect(e.mailer.ultimo().text).not.toMatch(/Usuario:/);
+    expect(e.mailer.ultimo().html).toContain(
+      ((m as RegExpExecArray)[1] as string)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;'),
+    );
     return (m as RegExpExecArray)[1] as string;
   };
 
@@ -55,11 +63,13 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
       `usuario=${d.usuario.toUpperCase()}&correo=${encodeURIComponent(d.correo.toUpperCase())}`,
     );
     expect(ocupado.status).toBe(200);
-    expect(ocupado.body.usuario).toEqual({ disponible: false, usadoPor: d.usuario });
-    expect(ocupado.body.correo).toMatchObject({ disponible: false, usadoPor: d.usuario });
+    expect(ocupado.body.usuario).toEqual({ disponible: false });
+    expect(ocupado.body.correo).toEqual({ disponible: false });
+    // Nunca se revela qué cuenta lo usa.
+    expect(JSON.stringify(ocupado.body)).not.toContain(d.usuario);
     const libre = await consulta('usuario=nadie.lo.usa&correo=libre%40barranquilla.gov.co');
-    expect(libre.body.usuario).toMatchObject({ disponible: true, usadoPor: null });
-    expect(libre.body.correo).toMatchObject({ disponible: true, usadoPor: null });
+    expect(libre.body.usuario).toEqual({ disponible: true });
+    expect(libre.body.correo).toEqual({ disponible: true });
     // Al editar a esa misma persona, su propio correo no cuenta como ocupado.
     const propio = await consulta(
       `correo=${encodeURIComponent(d.correo)}&excluirId=${creado.body.id}`,
@@ -117,7 +127,8 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     const temporal = await contrasenaDelCorreo();
     const correo = e.mailer.ultimo();
     expect(correo.to).toBe(d.correo);
-    expect(correo.text).toContain(`Usuario: ${d.usuario}`);
+    // El correo lleva solo la contraseña, no el usuario.
+    expect(correo.text).not.toContain(d.usuario);
     expect(correo.text).toContain('/interno/login');
     // Cumple la política de contraseñas y no se parece al usuario.
     expect(validarPassword(temporal, d.usuario)).toEqual([]);
@@ -183,7 +194,7 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
       d.correo,
     ]);
     await e.servicios.correos.procesarPendientes();
-    const temporal = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text)?.[1] as string;
+    const temporal = /contraseña temporal es:\s+(\S+)/.exec(e.mailer.ultimo().text)?.[1] as string;
     expect(temporal).toBeTruthy();
     expect(temporal).not.toContain('[');
     const fin = await e.pool.query(`SELECT secretos, estado FROM correos WHERE destinatario = $1`, [

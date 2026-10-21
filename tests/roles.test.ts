@@ -165,7 +165,9 @@ describe('roles y permisos (RF-ADM-01)', () => {
       expect(r.status).toBe(201);
       // La contraseña temporal solo llega por correo.
       await e.servicios.correos.esperarDespachos();
-      const temporal = /Contraseña temporal: (\S+)/.exec(e.mailer.ultimo().text)?.[1] as string;
+      const temporal = /contraseña temporal es:\s+(\S+)/.exec(
+        e.mailer.ultimo().text,
+      )?.[1] as string;
       await e.pool.query(`UPDATE usuarios SET debe_cambiar_password = false WHERE id = $1`, [
         r.body.id,
       ]);
