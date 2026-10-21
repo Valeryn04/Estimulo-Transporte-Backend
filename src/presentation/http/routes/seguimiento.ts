@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Servicios } from '../../../container.js';
 import { REPORTES } from '../../../infrastructure/repositories/reportes.js';
-import { requierePermisos } from '../middlewares/auth.js';
+import { requiereAlguno, requierePermisos } from '../middlewares/auth.js';
 import { contexto, idParam } from '../utilidades.js';
 
 const fecha = (campo: string) => z.iso.date({ error: `${campo}: use el formato AAAA-MM-DD` });
@@ -52,6 +52,14 @@ const biSchema = z.object({
 /** Seguimiento del programa: bitácora, expediente, tablero, reportes y BI. Se monta bajo /admin. */
 export function rutasSeguimiento(s: Servicios): Router {
   const r = Router();
+
+  r.get(
+    '/seguimiento/filtros',
+    requiereAlguno('bitacora.ver', 'tablero.ver', 'reportes.ver'),
+    async (_req, res) => {
+      res.json(await s.seguimiento.filtros());
+    },
+  );
 
   r.get('/bitacora', requierePermisos('bitacora.ver'), async (req, res) => {
     const q = bitacoraSchema.parse(req.query);

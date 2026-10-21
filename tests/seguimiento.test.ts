@@ -80,6 +80,15 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
     expect((await get(analista, '/bi/eventos')).status).toBe(200);
   });
 
+  it('ofrece las listas para filtrar', async () => {
+    const r = await get(control, '/seguimiento/filtros');
+    expect(r.status).toBe(200);
+    expect(r.body.vigencias.length).toBeGreaterThan(0);
+    expect(r.body.localidades.length).toBeGreaterThan(0);
+    expect(r.body.estados).toContainEqual(expect.objectContaining({ codigo: 'ASIGNADA' }));
+    expect((await get(validador, '/seguimiento/filtros')).status).toBe(403);
+  });
+
   describe('bitácora consultable', () => {
     it('filtra por radicado, módulo, acción, usuario y fechas, y pagina', async () => {
       const radicado = casos[0]!.radicado;

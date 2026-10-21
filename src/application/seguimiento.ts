@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
+import { ESTADOS } from '../domain/estados.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
@@ -37,6 +38,24 @@ export class ServicioSeguimiento {
     private readonly deps: Dependencias,
     private readonly encuestas: ServicioEncuestas,
   ) {}
+
+  /** Listas para los filtros de bitácora, tablero y reportes: vigencias, localidades y estados de la solicitud. */
+  async filtros() {
+    const pool = this.deps.pool;
+    const [vig, loc] = await Promise.all([
+      pool.query<{ id: number; anio: number; activa: boolean }>(
+        `SELECT id, anio, activa FROM vigencias ORDER BY anio DESC`,
+      ),
+      pool.query<{ id: number; nombre: string }>(
+        `SELECT id, nombre FROM catalogo_items WHERE catalogo = 'LOCALIDAD' AND activo ORDER BY nombre`,
+      ),
+    ]);
+    return {
+      vigencias: vig.rows,
+      localidades: loc.rows,
+      estados: Object.entries(ESTADOS).map(([codigo, d]) => ({ codigo, nombre: d.nombre })),
+    };
+  }
 
   // ------------------------------------------------------------------------------------------------------- bitácora
 

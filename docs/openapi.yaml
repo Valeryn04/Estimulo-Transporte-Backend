@@ -2879,6 +2879,15 @@ paths:
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '422': { $ref: '#/components/responses/Validacion' }
+  /admin/seguimiento/filtros:
+    get:
+      tags: [Seguimiento]
+      summary: Listas para filtrar bitácora, tablero y reportes
+      security: [{ bearerInterno: [] }]
+      responses:
+        '200': { description: Vigencias, localidades y estados }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
 
 components:
   securitySchemes:
@@ -2900,6 +2909,7 @@ components:
       schema: { type: string, enum: [estimulo-portal] }
       description: Cabecera que solo agrega el portal (defensa CSRF).
   schemas:
+
 
     EncuestaEntrada:
       type: object
