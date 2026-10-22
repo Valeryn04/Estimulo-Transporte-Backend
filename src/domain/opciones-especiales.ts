@@ -2,7 +2,8 @@
  * Opciones de cierre de un desplegable: «Ninguna/Ninguno» (la persona no tiene) y «N/A» (no aplica).
  * No van en todas las listas. Según el formulario de la propuesta:
  *  - Género y estado civil llevan solo «N/A»: «ninguno» no es una respuesta posible.
- *  - Etnia, escolaridad y ocupación llevan las dos: «Ninguna» es una respuesta real y «N/A» es no aplica.
+ *  - Etnia, escolaridad y ocupación llevan solo «Ninguna/Ninguno»: es una respuesta real, y «N/A» sería lo mismo
+ *    con otro nombre (decisión de la Alcaldía: una u otra según la lista, nunca las dos).
  *  - Las demás listas (tipo de identificación, EPS, barrios, transporte, causales…) no llevan ninguna: la
  *    respuesta siempre es una de las opciones de la lista.
  * Cada opción tiene un código fijo, así no se repite con otro nombre («No aplica», «NA») y se muestra al final.
@@ -19,9 +20,9 @@ const SIN_OPCIONES: ReglaOpciones = { ninguna: null, noAplica: false };
 const REGLAS: Record<string, ReglaOpciones> = {
   GENERO: { ninguna: null, noAplica: true },
   ESTADO_CIVIL: { ninguna: null, noAplica: true },
-  ETNIA: { ninguna: 'NINGUNA', noAplica: true },
-  ESCOLARIDAD: { ninguna: 'NINGUNA', noAplica: true },
-  OCUPACION: { ninguna: 'NINGUNO', noAplica: true },
+  ETNIA: { ninguna: 'NINGUNA', noAplica: false },
+  ESCOLARIDAD: { ninguna: 'NINGUNA', noAplica: false },
+  OCUPACION: { ninguna: 'NINGUNO', noAplica: false },
 };
 
 export const CODIGO_NO_APLICA = 'NA';

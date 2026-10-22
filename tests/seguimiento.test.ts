@@ -109,7 +109,8 @@ describe('seguimiento y control (RF-SEG-01, 03, 04, 05, 06, 07)', () => {
       expect(acc.body.items[0].accion).toBe('BENEFICIO_ASIGNADO');
       const usu = await get(control, `/bitacora?usuario=${asignador.usuario}`);
       expect(usu.body.items.length).toBeGreaterThan(0);
-      const hoy = new Date().toISOString().slice(0, 10);
+      // El día se cuenta en hora de Bogotá, no en UTC (de noche son días distintos).
+      const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
       expect(
         (await get(control, `/bitacora?desde=${hoy}&hasta=${hoy}`)).body.total,
       ).toBeGreaterThan(0);

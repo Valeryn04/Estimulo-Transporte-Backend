@@ -87,8 +87,8 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
       expect(await rechazo('EPS', 'Ninguna')).toContain('no lleva la opción «Ninguna»');
       expect(await rechazo('EPS', 'N/A')).toContain('no lleva la opción «N/A»');
       expect(await rechazo('TIPO_TRANSPORTE', 'No aplica')).toContain('no lleva la opción «N/A»');
-      // Etnia, escolaridad y ocupación llevan las dos y ya existen: no se repiten con otra escritura.
-      expect(await rechazo('ETNIA', 'No aplica')).toContain('ya existe');
+      // Etnia, escolaridad y ocupación llevan solo «Ninguna/Ninguno» (nunca las dos): no se repite ni se agrega «N/A».
+      expect(await rechazo('ETNIA', 'No aplica')).toContain('no lleva la opción «N/A»');
       expect(await rechazo('OCUPACION', 'Ninguno')).toContain('ya existe');
       // La EPS no tiene esas opciones activas.
       const eps = (await get('/catalogos/EPS/items?activo=true&tamano=100')).body.items as {

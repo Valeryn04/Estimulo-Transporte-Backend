@@ -69,6 +69,8 @@ export class ServicioCaracterizacion {
     if (!ctx) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
     const guardada = await caracterizacionRepo.obtener(pool, solicitudId, this.cipher);
     const datos = guardada?.datos ?? datosVacios();
+    // Sin cuidador registrado no hay pregunta sobre el servicio para el cuidador: la respuesta es «no».
+    if (!ctx.cuidador) datos.requiereCuidador = false;
     const d = ESTADOS[ctx.estado];
     return {
       solicitud: {

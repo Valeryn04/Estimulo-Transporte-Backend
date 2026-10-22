@@ -51,7 +51,12 @@ export class ServicioRadicacion {
   async pendientes(solicitudId: number) {
     const { pool } = this.deps;
     const guardada = await caracterizacionRepo.obtener(pool, solicitudId, this.cipher);
-    const avance = calcularAvance(guardada?.datos ?? datosVacios());
+    const datosGuardados = guardada?.datos ?? datosVacios();
+    // Sin cuidador registrado no se pregunta por el servicio para el cuidador.
+    if (!(await caracterizacionRepo.contexto(pool, solicitudId))?.cuidador) {
+      datosGuardados.requiereCuidador = false;
+    }
+    const avance = calcularAvance(datosGuardados);
     const datos = avance.secciones.flatMap((s) =>
       s.faltantes.map((f) => ({ campo: f.campo, seccion: s.codigo, mensaje: f.mensaje })),
     );

@@ -41,7 +41,9 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
   const tokenDe = (texto: string) => /token=([A-Za-z0-9_-]+)/.exec(texto)![1]!;
 
   /** Preinscribe, verifica el correo y abre la sesión del ciudadano con el enlace seguro. */
-  async function persona(opciones: { cuidadorNumero?: string; verificar?: boolean } = {}) {
+  async function persona(
+    opciones: { cuidadorNumero?: string; verificar?: boolean; sinCuidador?: boolean } = {},
+  ) {
     const f = (await request(e.app).get(`${pub}/preinscripcion/formulario`)).body as Formulario;
     e.reloj.ahora = new Date(e.reloj.ahora.getTime() + 60_000);
     consecutivo += 2;
@@ -52,9 +54,13 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
         pcdNombre: 'María Fernanda Pérez',
         pcdTipoIdentificacionId: cc,
         pcdNumero: String(consecutivo),
-        cuidadorNombre: 'Carlos López',
-        cuidadorTipoIdentificacionId: cc,
-        cuidadorNumero,
+        ...(opciones.sinCuidador
+          ? { tieneCuidador: false }
+          : {
+              cuidadorNombre: 'Carlos López',
+              cuidadorTipoIdentificacionId: cc,
+              cuidadorNumero,
+            }),
         correo: 'familia@correo.com',
         correoConfirmacion: 'familia@correo.com',
         aceptaAutorizacion: true,
@@ -171,6 +177,16 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
   });
 
   describe('guardado de avance (RF-CAR-04)', () => {
+    it('una persona sin cuidador no tiene cuidador en el formulario y no se le pregunta por su servicio', async () => {
+      const p = await persona({ sinCuidador: true });
+      const r = await ver(p.token);
+      expect(r.status).toBe(200);
+      expect(r.body.cuidador).toBeNull();
+      expect(r.body.datos.requiereCuidador).toBe(false);
+      const pendientes = await e.servicios.radicacion.pendientes(p.solicitudId);
+      expect(pendientes.datos.map((d) => d.campo)).not.toContain('requiereCuidador');
+    });
+
     it('guarda datos a medias y los devuelve al retomar, con el avance calculado', async () => {
       const p = await persona();
       const c = (await ver(p.token)).body.catalogos as Respuesta['catalogos'];
