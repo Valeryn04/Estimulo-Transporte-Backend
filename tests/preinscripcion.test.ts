@@ -142,6 +142,7 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       expect(a.rows[0].ip).toBeTruthy();
       expect(a.rows[0].user_agent).toBe('Prueba/1.0');
       expect(a.rows[0].aceptada_at).toBeInstanceOf(Date);
+      await e.servicios.correos.esperarDespachos();
       // El token nunca se guarda en claro: solo su hash.
       const enlace = tokenDe(e.mailer.ultimo().text);
       const t = await e.pool.query(
