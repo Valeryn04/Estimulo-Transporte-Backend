@@ -723,6 +723,15 @@ export class ServicioValidacion {
         // RF-PRI-01: al quedar validado, el caso recibe su puntaje con la matriz vigente.
         const r = await this.priorizacion.calcularEnTx(tx, solicitudId, null);
         if (r.ok) puntaje = r.calculo.puntaje;
+        await alertasRepo.crear(tx, {
+          tipo: 'CASO_PRIORIZADO',
+          permisoDestino: 'asignacion.asignar',
+          titulo: `Caso listo para asignar (${base.radicado ?? ''})`.trim(),
+          mensaje: `${base.pcd.nombre} quedó validado${puntaje === null ? '' : ` con ${puntaje} puntos`}. Revise la propuesta de asignación.`,
+          enlace: '/interno/asignacion',
+          solicitudId,
+          clave: `CASO_PRIORIZADO:${solicitudId}`,
+        });
       }
       await bitacoraRepo.registrar(tx, {
         usuarioId: actor.id,

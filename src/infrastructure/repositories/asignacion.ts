@@ -650,6 +650,7 @@ export const alertasRepo = {
       `SELECT id, tipo, titulo, mensaje, enlace, solicitud_id, creada_at FROM alertas
         WHERE atendida_at IS NULL
           AND ((usuario_destino IS NULL AND permiso_destino = ANY($1::text[])) OR usuario_destino = $3)
+          AND NOT EXISTS (SELECT 1 FROM alerta_lecturas l WHERE l.alerta_id = alertas.id AND l.usuario_id = $3)
         ORDER BY creada_at DESC, id DESC LIMIT $2`,
       [permisos, limite, usuarioId],
     );
@@ -671,10 +672,13 @@ export const alertasRepo = {
     permisos: string[],
     usuarioId: number,
   ): Promise<boolean> {
+    // La lectura es de cada persona: el aviso sigue pendiente para los demás del mismo rol.
     const r = await db.query(
-      `UPDATE alertas SET atendida_por = $3, atendida_at = now()
+      `INSERT INTO alerta_lecturas (alerta_id, usuario_id)
+       SELECT id, $3 FROM alertas
         WHERE id = $1 AND atendida_at IS NULL
-          AND ((usuario_destino IS NULL AND permiso_destino = ANY($2::text[])) OR usuario_destino = $3)`,
+          AND ((usuario_destino IS NULL AND permiso_destino = ANY($2::text[])) OR usuario_destino = $3)
+       ON CONFLICT DO NOTHING`,
       [id, permisos, usuarioId],
     );
     return r.rowCount === 1;

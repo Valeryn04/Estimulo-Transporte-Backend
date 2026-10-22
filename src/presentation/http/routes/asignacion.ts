@@ -34,6 +34,14 @@ const ajusteSchema = z.object({
     .min(0, 'Presupuesto: no puede ser negativo')
     .max(10_000_000_000_000, 'Presupuesto: demasiado grande')
     .optional(),
+  // Lo que la pantalla tenía cargado: si otra persona lo cambió mientras tanto, no se pisa su cambio.
+  base: z
+    .object({
+      cuposTotales: z.number().optional(),
+      valorEstimulo: z.number().optional(),
+      presupuestoTotal: z.number().optional(),
+    })
+    .optional(),
   distribucionLocalidad: z.array(itemDistribucionSchema).max(100).optional(),
   distribucionTransporte: z.array(itemDistribucionSchema).max(100).optional(),
   motivo: z

@@ -275,6 +275,19 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       );
       expect(valor.status, JSON.stringify(valor.body)).toBe(200);
       expect(valor.body.valorEstimulo).toBe(500_000);
+      // Si otra persona ya cambió el valor mientras se editaba, no se pisa su cambio.
+      const desactualizado = await ajustar(
+        responsable,
+        {
+          valorEstimulo: 600_000,
+          base: { valorEstimulo: 400_000 },
+          motivo: 'Cambio sobre un dato que ya no es el vigente',
+        },
+        false,
+      );
+      expect(desactualizado.status).toBe(409);
+      expect(desactualizado.body.error.codigo).toBe('DATOS_CAMBIARON');
+      expect(desactualizado.body.error.mensaje).toContain('el valor del estímulo');
 
       const historial = (await get(analista, '/cupos/ajustes')).body.items as {
         id: number;
@@ -577,9 +590,12 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         mensaje: string;
         enlace: string;
       }[];
-      expect(avisos).toHaveLength(1);
-      expect(avisos[0]).toMatchObject({ tipo: 'CUPO_LIBERADO', enlace: '/interno/asignacion' });
-      expect(avisos[0]!.mensaje).toContain(casoC.radicado);
+      // (También le llegaron los avisos de cada caso que quedó listo para asignar.)
+      const liberados = avisos.filter((x) => x.tipo === 'CUPO_LIBERADO');
+      expect(liberados).toHaveLength(1);
+      expect(liberados[0]).toMatchObject({ enlace: '/interno/asignacion' });
+      expect(liberados[0]!.mensaje).toContain(casoC.radicado);
+      expect(avisos.some((x) => x.tipo === 'CASO_PRIORIZADO')).toBe(true);
       expect((await request(e.app).get(`${adm}/alertas`).set(auth(analista))).body.items).toEqual(
         [],
       );
@@ -587,16 +603,22 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         [],
       );
       expect(
-        (await request(e.app).post(`${adm}/alertas/${avisos[0]!.id}/atender`).set(auth(analista)))
-          .status,
+        (
+          await request(e.app)
+            .post(`${adm}/alertas/${liberados[0]!.id}/atender`)
+            .set(auth(analista))
+        ).status,
       ).toBe(404);
       expect(
-        (await request(e.app).post(`${adm}/alertas/${avisos[0]!.id}/atender`).set(auth(asignador)))
-          .status,
+        (
+          await request(e.app)
+            .post(`${adm}/alertas/${liberados[0]!.id}/atender`)
+            .set(auth(asignador))
+        ).status,
       ).toBe(204);
-      expect((await request(e.app).get(`${adm}/alertas`).set(auth(asignador))).body.items).toEqual(
-        [],
-      );
+      const despues = (await request(e.app).get(`${adm}/alertas`).set(auth(asignador))).body
+        .items as { tipo: string }[];
+      expect(despues.some((x) => x.tipo === 'CUPO_LIBERADO')).toBe(false);
       // Liberar dos veces no se puede.
       await expect(
         e.servicios.asignacion.liberarCupo(e.pool, asignador.id, beneficioB, 'otra vez', {

@@ -300,6 +300,12 @@ describe('priorización (RF-PRI-01..04)', () => {
       });
       gemeloP = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'GRUPO_C' });
       gemeloQ = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'GRUPO_C' });
+      // Al quedar validado y priorizado, el aviso le llega a quien asigna.
+      const avisos = (await request(e.app).get(`${adm}/alertas`).set(auth(asignador))).body
+        .items as { tipo: string; solicitudId: number | null }[];
+      expect(
+        avisos.some((x) => x.tipo === 'CASO_PRIORIZADO' && x.solicitudId === casoB.solicitudId),
+      ).toBe(true);
       const puntaje = async (id: number) => (await pri(asignador, `/casos/${id}`)).body.puntaje;
       expect(await puntaje(casoB.solicitudId)).toBe(35);
       expect(await puntaje(tieX.solicitudId)).toBe(40);
@@ -429,6 +435,12 @@ describe('priorización (RF-PRI-01..04)', () => {
       for (const [k, v] of Object.entries(campos)) r = r.field(k, v);
       return archivo ? r.attach('archivo', pdf('soporte'), 'soporte.pdf') : r;
     };
+    const avisosDe = async (c: CuentaPrueba) =>
+      (await request(e.app).get(`${adm}/alertas`).set(auth(c))).body.items as {
+        id: number;
+        tipo: string;
+        solicitudId: number | null;
+      }[];
     const JUSTIFICACION =
       'Persona en lista de espera de trasplante con controles semanales y sin red de apoyo.';
 
@@ -496,6 +508,19 @@ describe('priorización (RF-PRI-01..04)', () => {
       expect(Buffer.from(ev.body).toString('latin1')).toContain('%PDF');
       const lista = await pri(analista, '/excepciones?estado=PROPUESTA');
       expect(lista.body.items.map((x: { id: number }) => x.id)).toEqual([excepcionId]);
+      // Quien decide se entera en su campana; quien propone, no. Cada persona marca solo sus avisos.
+      const delResponsable = (await avisosDe(responsable)).find(
+        (x) => x.tipo === 'EXCEPCION_PROPUESTA' && x.solicitudId === casoB.solicitudId,
+      );
+      expect(delResponsable).toBeDefined();
+      expect((await avisosDe(asignador)).some((x) => x.tipo === 'EXCEPCION_PROPUESTA')).toBe(false);
+      const marcada = await request(e.app)
+        .post(`${adm}/alertas/${delResponsable!.id}/atender`)
+        .set(auth(responsable));
+      expect(marcada.status).toBe(204);
+      expect((await avisosDe(responsable)).some((x) => x.id === delResponsable!.id)).toBe(false);
+      // Otra persona con el mismo permiso la sigue viendo como pendiente.
+      expect((await avisosDe(admin)).some((x) => x.id === delResponsable!.id)).toBe(true);
     });
 
     it('la decide el responsable del proceso, nunca quien la propuso, y el rechazo exige motivo', async () => {
@@ -533,6 +558,12 @@ describe('priorización (RF-PRI-01..04)', () => {
       });
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
       expect(ok.body).toMatchObject({ estado: 'APROBADA', aplicable: true });
+      // La decisión le llega a quien propuso.
+      expect(
+        (await avisosDe(asignador)).some(
+          (x) => x.tipo === 'EXCEPCION_DECIDIDA' && x.solicitudId === casoB.solicitudId,
+        ),
+      ).toBe(true);
       const listado = (await pri(asignador, '/listado')).body.items as {
         radicado: string;
         posicion: number;

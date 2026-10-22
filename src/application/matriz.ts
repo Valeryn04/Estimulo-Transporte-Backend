@@ -9,6 +9,7 @@ import {
 } from '../domain/priorizacion.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import {
   calculosRepo,
@@ -181,6 +182,14 @@ export class ServicioMatriz {
         entidadId: id,
         ip: ctx.ip,
       });
+      await alertasRepo.crear(tx, {
+        tipo: 'MATRIZ_PIDE_APROBACION',
+        permisoDestino: 'priorizacion.aprobar',
+        titulo: `La matriz versión ${m.version} pide aprobación`,
+        mensaje: `${actor.nombres} pidió aprobar una nueva versión de la matriz de ponderación.`,
+        enlace: '/interno/admin/matriz',
+        clave: `MATRIZ_PIDE_APROBACION:${id}`,
+      });
     });
     return this.obtener(id);
   }
@@ -225,6 +234,17 @@ export class ServicioMatriz {
         justificacion: d.motivo.trim() || null,
         ip: ctx.ip,
       });
+      if (m.solicitadaPorId !== null) {
+        await alertasRepo.crear(tx, {
+          tipo: 'MATRIZ_DECIDIDA',
+          permisoDestino: 'matriz.administrar',
+          usuarioDestino: m.solicitadaPorId,
+          titulo: `La matriz versión ${m.version} fue ${d.decision === 'APROBAR' ? 'aprobada' : 'rechazada'}`,
+          mensaje:
+            d.decision === 'APROBAR' ? 'Ya es la versión vigente.' : `Motivo: ${d.motivo.trim()}`,
+          enlace: '/interno/admin/matriz',
+        });
+      }
     });
     return this.obtener(id);
   }

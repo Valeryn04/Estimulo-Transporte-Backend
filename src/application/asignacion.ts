@@ -35,6 +35,8 @@ export interface AjusteEntrada {
   presupuestoTotal?: number;
   distribucionLocalidad?: { itemId: number; cupos: number }[];
   distribucionTransporte?: { itemId: number; cupos: number }[];
+  /** Valores que la pantalla tenía cargados al editar, para no pisar el cambio de otra persona. */
+  base?: { cuposTotales?: number; valorEstimulo?: number; presupuestoTotal?: number };
   motivo: string;
 }
 
@@ -169,6 +171,19 @@ export class ServicioAsignacion {
       const fin = await asignacionRepo.finanzas(tx, id, true);
       if (!fin) throw notFound('La vigencia no existe', 'VIGENCIA_NO_ENCONTRADA');
       const dist = await asignacionRepo.distribucion(tx, id);
+      for (const [campo, nombre] of [
+        ['cuposTotales', 'los cupos'],
+        ['valorEstimulo', 'el valor del estímulo'],
+        ['presupuestoTotal', 'el presupuesto'],
+      ] as const) {
+        const cargado = d.base?.[campo];
+        if (d[campo] !== undefined && cargado !== undefined && Number(fin[campo]) !== cargado) {
+          throw conflict(
+            'DATOS_CAMBIARON',
+            `Otra persona modificó ${nombre} mientras usted editaba (ahora es ${Number(fin[campo]).toLocaleString('es-CO')}). Recargue la pantalla y vuelva a intentarlo.`,
+          );
+        }
+      }
       const problemas: { campo: string; mensaje: string }[] = [];
       const cuposNuevos = d.cuposTotales ?? fin.cuposTotales;
       if (d.cuposTotales !== undefined && d.cuposTotales < fin.ocupados) {

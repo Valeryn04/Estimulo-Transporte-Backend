@@ -10,6 +10,7 @@ import {
 } from '../domain/priorizacion.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { caracterizacionRepo } from '../infrastructure/repositories/caracterizacion.js';
 import {
@@ -358,6 +359,16 @@ export class ServicioPriorizacion {
         detalle: { evidencia: evidencia.nombre, sha256: evidencia.sha256 },
         ip: ctx.ip,
       });
+      const creada = await excepcionesRepo.porId(tx, nuevo);
+      await alertasRepo.crear(tx, {
+        tipo: 'EXCEPCION_PROPUESTA',
+        permisoDestino: 'priorizacion.aprobar',
+        titulo: `Excepción por decidir (${creada?.radicado ?? ''})`.trim(),
+        mensaje: `${actor.nombres} propone ${d.ajuste > 0 ? '+' : ''}${d.ajuste} puntos para ${creada?.pcdNombre ?? 'un caso'}.`,
+        enlace: '/interno/priorizacion/excepciones',
+        solicitudId,
+        clave: `EXCEPCION_PROPUESTA:${nuevo}`,
+      });
       return nuevo;
     });
     return vistaExcepcion((await excepcionesRepo.porId(pool, id)) as Excepcion);
@@ -417,6 +428,19 @@ export class ServicioPriorizacion {
         },
         justificacion: d.motivo.trim() || null,
         ip: ctx.ip,
+      });
+      // Quien la propuso se entera de la decisión.
+      await alertasRepo.crear(tx, {
+        tipo: 'EXCEPCION_DECIDIDA',
+        permisoDestino: 'priorizacion.proponer',
+        usuarioDestino: e.propuestaPorId,
+        titulo: `Su excepción fue ${d.decision === 'APROBAR' ? 'aprobada' : 'rechazada'} (${e.radicado})`,
+        mensaje:
+          d.decision === 'APROBAR'
+            ? `El ajuste de ${e.ajuste > 0 ? '+' : ''}${e.ajuste} puntos ya cuenta en el puntaje de ${e.pcdNombre}.`
+            : `Motivo: ${d.motivo.trim()}`,
+        enlace: '/interno/priorizacion/excepciones',
+        solicitudId: e.solicitudId,
       });
     });
     return vistaExcepcion((await excepcionesRepo.porId(this.deps.pool, id)) as Excepcion);
