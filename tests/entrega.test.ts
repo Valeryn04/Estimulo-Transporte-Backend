@@ -49,6 +49,10 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
   beforeAll(async () => {
     e = await crearEntorno();
     ay = ayudantesSolicitud(e);
+    // Las tarjetas de la prueba comienzan por TM.
+    await e.pool.query(
+      `INSERT INTO parametro_versiones (clave, valor, justificacion) VALUES ('tarjeta_prefijo', 'TM', 'prueba')`,
+    );
     validador = await crearCuenta(e, 'AUDITOR_VERIFICADOR');
     asignador = await crearCuenta(e, 'ASIGNADOR');
     analista = await crearCuenta(e, 'ANALISTA');
@@ -110,7 +114,6 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
     tipoTransporteId: transporte,
     fechaEntrega: hoy(),
     receptorTipo: 'PCD',
-    funcionarioEntrega: 'Funcionaria de entrega',
     ...extra,
   });
   const estadoDe = async (id: number) =>
@@ -122,6 +125,10 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
   };
 
   it('cada rol hace solo lo suyo: consultar, registrar y activar', async () => {
+    // El formulario trae listo cómo comienzan las tarjetas y el transporte que la persona dijo usar.
+    const detalle = (await get(analista, `/beneficiarios/${beneficioA}`)).body;
+    expect(detalle.sugerencias.prefijoTarjeta).toBe('TM');
+    expect(detalle.sugerencias).toHaveProperty('tipoTransporteId');
     expect((await get(analista, `/beneficiarios/${beneficioA}`)).status).toBe(200);
     expect((await get(validador, `/beneficiarios/${beneficioA}`)).status).toBe(403);
     expect((await entrega(analista, beneficioA, base())).status).toBe(403);
@@ -171,14 +178,34 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
     expect(
       await campos(await entrega(asignador, beneficioA, base({ tipoTransporteId: 999999 }))),
     ).toContain('tipoTransporteId');
-    expect(
-      await campos(await entrega(asignador, beneficioA, base({ funcionarioEntrega: 'x' }))),
-    ).toContain('funcionarioEntrega');
+    // El identificador debe comenzar como lo definió la Gerencia (parámetro tarjeta_prefijo).
+    const sinPrefijo = await entrega(asignador, beneficioA, base({ tarjetaId: 'XX00001234' }));
+    expect(await campos(sinPrefijo)).toContain('tarjetaId');
+    expect(JSON.stringify(sinPrefijo.body)).toContain('debe comenzar por TM');
     const tercero = await entrega(asignador, beneficioA, base({ receptorTipo: 'TERCERO' }));
     expect(tercero.status).toBe(422);
     expect(await campos(tercero)).toEqual(
-      expect.arrayContaining(['receptorNombre', 'receptorTipoIdentificacionId', 'receptorNumero']),
+      expect.arrayContaining([
+        'receptorNombre',
+        'receptorTipoIdentificacionId',
+        'receptorNumero',
+        'terceroConAutorizacion',
+      ]),
     );
+    // Sin la autorización firmada no se entrega a un tercero.
+    const sinAutorizacion = await entrega(
+      asignador,
+      beneficioA,
+      base({
+        receptorTipo: 'TERCERO',
+        receptorNombre: 'Ana Gómez Vargas',
+        receptorTipoIdentificacionId: cedula,
+        receptorNumero: '12345678',
+        terceroConAutorizacion: false,
+      }),
+    );
+    expect(sinAutorizacion.status).toBe(422);
+    expect(JSON.stringify(sinAutorizacion.body)).toContain('Sin la autorización firmada');
     // El beneficio sin cuidador no tiene tarjeta para el cuidador.
     const sinCuidador = await entrega(asignador, beneficioB, base({ rol: 'CUIDADOR' }));
     expect(sinCuidador.status).toBe(422);
@@ -212,7 +239,6 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
       tarjeta: '******1234',
       fechaEntrega: hoy(),
       receptorTipo: 'PCD',
-      funcionarioEntrega: 'Funcionaria de entrega',
       registradoPor: asignador.usuario,
       soporte: { nombre: 'acta-firmada.pdf' },
     });
@@ -276,15 +302,23 @@ describe('entrega del medio de transporte y activación (RF-ASI-05, RF-ASI-06)',
         receptorNombre: 'Ana Gómez Vargas',
         receptorTipoIdentificacionId: cedula,
         receptorNumero: '1.234.567-8',
+        terceroConAutorizacion: true,
       }),
     );
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body.estado).toBe('PENDIENTE_ACTIVACION');
     expect(r.body.pendientes).toEqual([]);
+    // El funcionario que entrega es quien tiene la sesión abierta.
+    expect(
+      r.body.entregas.every((x: { funcionarioEntrega: string }) =>
+        x.funcionarioEntrega.includes(asignador.usuario),
+      ),
+    ).toBe(true);
     const reg = r.body.entregas.find((x: { rol: string }) => x.rol === 'CUIDADOR');
     expect(reg).toMatchObject({
       receptorTipo: 'TERCERO',
       receptorNombre: 'Ana Gómez Vargas',
+      terceroConAutorizacion: true,
       receptorNumero: '12345678',
       receptorTipoIdentificacion: expect.any(String),
     });

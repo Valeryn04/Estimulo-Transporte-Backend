@@ -34,6 +34,8 @@ export interface DatosPreinscripcion {
   pcdNumero: string;
   /** Falso cuando la persona no tiene cuidador; entonces no se piden los datos del cuidador. */
   tieneCuidador?: boolean;
+  /** Quién diligencia el formulario. */
+  diligenciadaPor?: 'PCD' | 'CUIDADOR';
   cuidadorNombre?: string;
   cuidadorTipoIdentificacionId?: number;
   cuidadorNumero?: string;
@@ -226,6 +228,7 @@ export class ServicioPreinscripcion {
           vigenciaId: vigencia.id,
           pcdId,
           cuidadorId,
+          diligenciadaPor: d.diligenciadaPor ?? null,
           direccion: d.direccion?.trim() || null,
           localidadId,
           barrioId,

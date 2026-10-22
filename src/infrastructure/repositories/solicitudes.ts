@@ -134,6 +134,7 @@ export const solicitudesRepo = {
       vigenciaId: number;
       pcdId: number;
       cuidadorId: number | null;
+      diligenciadaPor?: 'PCD' | 'CUIDADOR' | null;
       direccion: string | null;
       localidadId: number | null;
       barrioId: number | null;
@@ -141,9 +142,18 @@ export const solicitudesRepo = {
     },
   ): Promise<number> {
     const r = await db.query<{ id: number }>(
-      `INSERT INTO solicitudes (vigencia_id, pcd_id, cuidador_id, direccion, localidad_id, barrio_id, correo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [d.vigenciaId, d.pcdId, d.cuidadorId, d.direccion, d.localidadId, d.barrioId, d.correo],
+      `INSERT INTO solicitudes (vigencia_id, pcd_id, cuidador_id, direccion, localidad_id, barrio_id, correo, diligenciada_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [
+        d.vigenciaId,
+        d.pcdId,
+        d.cuidadorId,
+        d.direccion,
+        d.localidadId,
+        d.barrioId,
+        d.correo,
+        d.diligenciadaPor ?? null,
+      ],
     );
     return (r.rows[0] as { id: number }).id;
   },

@@ -24,6 +24,7 @@ export interface Entrega {
   receptorTipoIdentificacion: string | null;
   receptorNumero: string | null;
   funcionarioEntrega: string;
+  terceroConAutorizacion: boolean | null;
   soporte: { nombre: string; tamanoBytes: number };
   vigente: boolean;
   registradoPor: string;
@@ -130,6 +131,7 @@ export const entregasRepo = {
       receptor_tipo_identificacion: string | null;
       receptor_numero: string | null;
       funcionario_entrega: string;
+      tercero_con_autorizacion: boolean | null;
       soporte_nombre: string;
       soporte_tamano: number;
       vigente: boolean;
@@ -139,7 +141,7 @@ export const entregasRepo = {
       `SELECT e.id, e.rol, e.tarjeta_id, e.tipo_transporte_id, tt.nombre AS tipo_transporte,
               to_char(e.fecha_entrega, 'YYYY-MM-DD') AS fecha_entrega, e.receptor_tipo, e.receptor_nombre,
               ti.nombre AS receptor_tipo_identificacion, e.receptor_numero, e.funcionario_entrega,
-              e.soporte_nombre, e.soporte_tamano, e.vigente, u.usuario, e.registrado_at
+              e.tercero_con_autorizacion, e.soporte_nombre, e.soporte_tamano, e.vigente, u.usuario, e.registrado_at
          FROM entregas e
          JOIN catalogo_items tt ON tt.id = e.tipo_transporte_id
          LEFT JOIN catalogo_items ti ON ti.id = e.receptor_tipo_identificacion_id
@@ -159,6 +161,7 @@ export const entregasRepo = {
       receptorTipoIdentificacion: x.receptor_tipo_identificacion,
       receptorNumero: x.receptor_numero,
       funcionarioEntrega: x.funcionario_entrega,
+      terceroConAutorizacion: x.tercero_con_autorizacion,
       soporte: { nombre: x.soporte_nombre, tamanoBytes: x.soporte_tamano },
       vigente: x.vigente,
       registradoPor: x.usuario,
@@ -179,6 +182,7 @@ export const entregasRepo = {
       receptorTipoIdentificacionId: number | null;
       receptorNumero: string | null;
       funcionarioEntrega: string;
+      terceroConAutorizacion: boolean | null;
       soporte: EvidenciaGuardada;
       usuarioId: number;
     },
@@ -186,8 +190,9 @@ export const entregasRepo = {
     const r = await db.query<{ id: string }>(
       `INSERT INTO entregas (beneficio_id, rol, tarjeta_id, tipo_transporte_id, fecha_entrega, receptor_tipo,
                              receptor_nombre, receptor_tipo_identificacion_id, receptor_numero, funcionario_entrega,
-                             soporte_ruta, soporte_nombre, soporte_mime, soporte_tamano, soporte_sha256, registrado_por)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
+                             soporte_ruta, soporte_nombre, soporte_mime, soporte_tamano, soporte_sha256, registrado_por,
+                             tercero_con_autorizacion)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
       [
         d.beneficioId,
         d.rol,
@@ -205,6 +210,7 @@ export const entregasRepo = {
         d.soporte.tamanoBytes,
         d.soporte.sha256,
         d.usuarioId,
+        d.terceroConAutorizacion,
       ],
     );
     return Number((r.rows[0] as { id: string }).id);
@@ -246,6 +252,15 @@ export const entregasRepo = {
   },
 
   /** Tipos de transporte e identificación que se pueden elegir al registrar una entrega. */
+  /** El tipo de transporte que la persona dijo usar al llenar la caracterización. */
+  async transporteDeLaSolicitud(db: Queryable, solicitudId: number): Promise<number | null> {
+    const r = await db.query<{ t: number | null }>(
+      `SELECT tipo_transporte_id AS t FROM caracterizaciones WHERE solicitud_id = $1`,
+      [solicitudId],
+    );
+    return r.rows[0]?.t ?? null;
+  },
+
   async opciones(db: Queryable) {
     const r = await db.query<{ id: number; catalogo: string; nombre: string }>(
       `SELECT id, catalogo, nombre FROM catalogo_items

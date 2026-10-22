@@ -43,6 +43,8 @@ const preinscripcionBase = z.object({
   pcdNumero: numero('Número de identificación de la persona con discapacidad'),
   // Si la persona no tiene cuidador, se envía false y no se piden los datos del cuidador.
   tieneCuidador: z.boolean().optional(),
+  // Quién llena el formulario: la persona con discapacidad o su cuidador.
+  diligenciadaPor: z.enum(['PCD', 'CUIDADOR']).optional(),
   // Opcional; si se envía, debe tener el formato estándar de la dirección (el portal la arma por partes).
   direccion: z
     .string()

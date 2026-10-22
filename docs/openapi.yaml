@@ -1502,7 +1502,8 @@ paths:
         - {
             name: estado,
             in: query,
-            schema: { type: string, enum: [RADICADA, SUBSANADA, EN_REVISION, EN_SUBSANACION, TODOS] },
+            schema:
+              { type: string, enum: [RADICADA, SUBSANADA, EN_REVISION, EN_SUBSANACION, TODOS] },
           }
         - {
             name: asignado,
@@ -2354,7 +2355,7 @@ paths:
                 datos:
                   {
                     type: string,
-                    description: 'JSON: rol (PCD | CUIDADOR), tarjetaId, tipoTransporteId, fechaEntrega (AAAA-MM-DD), receptorTipo (PCD | CUIDADOR | TERCERO), receptorNombre / receptorTipoIdentificacionId / receptorNumero (si es un tercero), funcionarioEntrega',
+                    description: 'JSON: rol (PCD | CUIDADOR), tarjetaId, tipoTransporteId, fechaEntrega (AAAA-MM-DD), receptorTipo (PCD | CUIDADOR | TERCERO), receptorNombre / receptorTipoIdentificacionId / receptorNumero / terceroConAutorizacion (si es un tercero; debe ser true). El funcionario que entrega es quien tiene la sesión',
                   }
                 archivo: { type: string, format: binary }
       responses:
@@ -3138,7 +3139,7 @@ components:
               escalaMax: { type: integer, nullable: true }
     EntregaDatos:
       type: object
-      required: [rol, tarjetaId, tipoTransporteId, fechaEntrega, receptorTipo, funcionarioEntrega]
+      required: [rol, tarjetaId, tipoTransporteId, fechaEntrega, receptorTipo]
       properties:
         rol: { type: string, enum: [PCD, CUIDADOR] }
         tarjetaId: { type: string }
@@ -3148,7 +3149,11 @@ components:
         receptorNombre: { type: string }
         receptorTipoIdentificacionId: { type: integer }
         receptorNumero: { type: string }
-        funcionarioEntrega: { type: string }
+        terceroConAutorizacion:
+          {
+            type: boolean,
+            description: 'Solo si recibe un tercero: presentó la autorización firmada',
+          }
     AsignacionEntrada:
       type: object
       required: [solicitudIds]
@@ -3617,6 +3622,8 @@ components:
         pcdNombre: { type: string }
         pcdTipoIdentificacionId: { type: integer }
         pcdNumero: { type: string }
+        diligenciadaPor:
+          { type: string, enum: [PCD, CUIDADOR], description: 'Quién llena el formulario' }
         tieneCuidador:
           {
             type: boolean,

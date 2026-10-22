@@ -92,11 +92,8 @@ const entregaSchema = z.object({
     .optional(),
   receptorTipoIdentificacionId: z.number().int().positive().optional(),
   receptorNumero: z.string().trim().max(30, 'Número de documento: máximo 30 caracteres').optional(),
-  funcionarioEntrega: z
-    .string({ error: 'Funcionario que entrega: escríbalo' })
-    .trim()
-    .min(3, 'Funcionario que entrega: escriba su nombre')
-    .max(150, 'Funcionario que entrega: máximo 150 caracteres'),
+  // El funcionario que entrega es quien tiene la sesión abierta: ya no se escribe.
+  terceroConAutorizacion: z.boolean().optional(),
 });
 
 const activarSchema = z.object({

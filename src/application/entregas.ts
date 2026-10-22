@@ -29,7 +29,8 @@ export interface EntregaEntrada {
   receptorNombre?: string;
   receptorTipoIdentificacionId?: number;
   receptorNumero?: string;
-  funcionarioEntrega: string;
+  /** Solo si recibe un tercero: si presentó la autorización firmada de la persona. */
+  terceroConAutorizacion?: boolean;
 }
 
 const ESTADOS_CON_ENTREGA: readonly string[] = [
@@ -95,12 +96,18 @@ export class ServicioEntregas {
         receptorTipoIdentificacion: e.receptorTipoIdentificacion,
         receptorNumero: e.receptorNumero,
         funcionarioEntrega: e.funcionarioEntrega,
+        terceroConAutorizacion: e.terceroConAutorizacion,
         soporte: e.soporte,
         vigente: e.vigente,
         registradoPor: e.registradoPor,
         registradoAt: e.registradoAt.toISOString(),
       })),
       opciones,
+      // Lo que el formulario trae listo: el transporte que la persona dijo usar y cómo comienzan las tarjetas.
+      sugerencias: {
+        tipoTransporteId: await entregasRepo.transporteDeLaSolicitud(pool, b.solicitudId),
+        prefijoTarjeta: (await parametrosRepo.texto(pool, 'tarjeta_prefijo')).trim(),
+      },
     };
   }
 
@@ -121,7 +128,26 @@ export class ServicioEntregas {
         mensaje: 'Identificador de la tarjeta: use de 4 a 30 letras, números o guiones',
       });
     }
+    const prefijo = (await parametrosRepo.texto(pool, 'tarjeta_prefijo')).trim().toUpperCase();
+    if (prefijo && PATRON_TARJETA.test(tarjetaId) && !tarjetaId.startsWith(prefijo)) {
+      errores.push({
+        campo: 'tarjetaId',
+        mensaje: `Identificador de la tarjeta: debe comenzar por ${prefijo}`,
+      });
+    }
     if (d.receptorTipo === 'TERCERO') {
+      if (d.terceroConAutorizacion === undefined) {
+        errores.push({
+          campo: 'terceroConAutorizacion',
+          mensaje: 'Autorización: indique si quien recibe presentó la autorización firmada',
+        });
+      } else if (d.terceroConAutorizacion === false) {
+        errores.push({
+          campo: 'terceroConAutorizacion',
+          mensaje:
+            'Sin la autorización firmada de la persona no se puede entregar la tarjeta a un tercero',
+        });
+      }
       if ((d.receptorNombre ?? '').trim().length < 3) {
         errores.push({ campo: 'receptorNombre', mensaje: 'Nombre de quien recibe: escríbalo' });
       }
@@ -211,7 +237,9 @@ export class ServicioEntregas {
             ? receptor.tipoIdentificacionId
             : (d.receptorTipoIdentificacionId as number),
           receptorNumero: receptor ? receptor.numero : normalizarNumero(d.receptorNumero as string),
-          funcionarioEntrega: d.funcionarioEntrega.trim(),
+          funcionarioEntrega: actor.nombres.trim(),
+          terceroConAutorizacion:
+            d.receptorTipo === 'TERCERO' ? (d.terceroConAutorizacion ?? null) : null,
           soporte,
           usuarioId: actor.id,
         });
@@ -265,7 +293,7 @@ export class ServicioEntregas {
         detalle: {
           beneficioId,
           receptorTipo: d.receptorTipo,
-          funcionarioEntrega: d.funcionarioEntrega.trim(),
+          funcionarioEntrega: actor.nombres.trim(),
           soporte: soporte.nombre,
           sha256: soporte.sha256,
         },
