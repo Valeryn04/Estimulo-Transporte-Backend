@@ -55,7 +55,14 @@ export interface ContextoSolicitud {
   radicado: string | null;
   radicadaAt: Date | null;
   pcd: { id: number; nombre: string; tipoCodigo: string; tipoNombre: string; numero: string };
-  cuidador: { id: number; nombre: string; tipoCodigo: string; tipoNombre: string; numero: string };
+  /** Nulo cuando la persona se preinscribió sin cuidador. */
+  cuidador: {
+    id: number;
+    nombre: string;
+    tipoCodigo: string;
+    tipoNombre: string;
+    numero: string;
+  } | null;
   /** El cuidador figura en otra solicitud: su nombre no se puede cambiar desde este formulario. */
   cuidadorEnOtrasSolicitudes: boolean;
 }
@@ -97,11 +104,11 @@ export const caracterizacionRepo = {
       pcd_tipo_codigo: string;
       pcd_tipo_nombre: string;
       pcd_numero: string;
-      cui_id: number;
-      cui_nombre: string;
-      cui_tipo_codigo: string;
-      cui_tipo_nombre: string;
-      cui_numero: string;
+      cui_id: number | null;
+      cui_nombre: string | null;
+      cui_tipo_codigo: string | null;
+      cui_tipo_nombre: string | null;
+      cui_numero: string | null;
       en_otras: boolean;
     }>(
       `SELECT s.id, s.estado, s.correo, v.anio, s.radicado, s.radicada_at,
@@ -115,8 +122,8 @@ export const caracterizacionRepo = {
          JOIN vigencias v ON v.id = s.vigencia_id
          JOIN personas p ON p.id = s.pcd_id
          JOIN catalogo_items tp ON tp.id = p.tipo_identificacion_id
-         JOIN personas c ON c.id = s.cuidador_id
-         JOIN catalogo_items tc ON tc.id = c.tipo_identificacion_id
+         LEFT JOIN personas c ON c.id = s.cuidador_id
+         LEFT JOIN catalogo_items tc ON tc.id = c.tipo_identificacion_id
         WHERE s.id = $1`,
       [solicitudId],
     );
@@ -136,13 +143,16 @@ export const caracterizacionRepo = {
         tipoNombre: f.pcd_tipo_nombre,
         numero: f.pcd_numero,
       },
-      cuidador: {
-        id: f.cui_id,
-        nombre: f.cui_nombre,
-        tipoCodigo: f.cui_tipo_codigo,
-        tipoNombre: f.cui_tipo_nombre,
-        numero: f.cui_numero,
-      },
+      cuidador:
+        f.cui_id === null
+          ? null
+          : {
+              id: f.cui_id,
+              nombre: f.cui_nombre as string,
+              tipoCodigo: f.cui_tipo_codigo as string,
+              tipoNombre: f.cui_tipo_nombre as string,
+              numero: f.cui_numero as string,
+            },
       cuidadorEnOtrasSolicitudes: f.en_otras,
     };
   },

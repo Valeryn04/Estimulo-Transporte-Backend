@@ -349,7 +349,7 @@ export class ServicioValidacion {
       alertas: await this.cruces.alertas(
         pool,
         items.flatMap((i) => (i.cruceCodigo ? [i.cruceCodigo] : [])),
-        { pcd: base.pcd.numero, cuidador: base.cuidador.numero },
+        { pcd: base.pcd.numero, cuidador: base.cuidador?.numero ?? null },
       ),
       decisiones: decisiones.map((x) => ({
         id: x.id,

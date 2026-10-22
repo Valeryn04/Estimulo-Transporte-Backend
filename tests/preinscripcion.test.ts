@@ -98,6 +98,22 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
   });
 
   describe('registro', () => {
+    it('permite preinscribir a una persona sin cuidador', async () => {
+      const d = await datos({ tieneCuidador: false });
+      const r = await enviar(d);
+      expect(r.status).toBe(201);
+      const s = await e.pool.query(`SELECT cuidador_id FROM solicitudes ORDER BY id DESC LIMIT 1`);
+      expect(s.rows[0].cuidador_id).toBeNull();
+    });
+
+    it('si dice que tiene cuidador, sus datos son obligatorios', async () => {
+      const d = (await datos({ tieneCuidador: true })) as Record<string, unknown>;
+      delete d.cuidadorNumero;
+      const r = await enviar(d);
+      expect(r.status).toBe(422);
+      expect(JSON.stringify(r.body)).toContain('cuidadorNumero');
+    });
+
     it('registra la preinscripción: personas, solicitud, aceptación con IP y versión, token cifrado y correo', async () => {
       const d = await datos();
       const r = await enviar(d);

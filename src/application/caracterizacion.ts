@@ -86,12 +86,17 @@ export class ServicioCaracterizacion {
         numero: ctx.pcd.numero,
         correo: ctx.correo,
       },
-      cuidador: {
-        nombre: ctx.cuidador.nombre,
-        tipoIdentificacion: { codigo: ctx.cuidador.tipoCodigo, nombre: ctx.cuidador.tipoNombre },
-        numero: ctx.cuidador.numero,
-        nombreEditable: !ctx.cuidadorEnOtrasSolicitudes,
-      },
+      cuidador: ctx.cuidador
+        ? {
+            nombre: ctx.cuidador.nombre,
+            tipoIdentificacion: {
+              codigo: ctx.cuidador.tipoCodigo,
+              nombre: ctx.cuidador.tipoNombre,
+            },
+            numero: ctx.cuidador.numero,
+            nombreEditable: !ctx.cuidadorEnOtrasSolicitudes,
+          }
+        : null,
       datos,
       subsanacion: await vistaSubsanacion(pool, solicitudId),
       avance: calcularAvance(datos),
@@ -199,6 +204,8 @@ export class ServicioCaracterizacion {
           mensaje: 'Edades de los hijos: escriba una edad por cada hijo',
         });
       }
+      // Sin cuidador registrado no hay servicio para el cuidador.
+      if (!solicitud.cuidador) combinado.requiereCuidador = false;
       const datos = aplicarDependencias(combinado as unknown as DatosCaracterizacion);
 
       // Las listas son cerradas: solo se acepta una opción activa del catálogo (RNF-10).
@@ -228,7 +235,7 @@ export class ServicioCaracterizacion {
           });
         }
       }
-      if (cambios.cuidadorNombre !== undefined) {
+      if (cambios.cuidadorNombre !== undefined && solicitud.cuidador) {
         const nuevo = normalizarNombre(cambios.cuidadorNombre);
         if (nuevo !== solicitud.cuidador.nombre) {
           if (solicitud.cuidadorEnOtrasSolicitudes) {
@@ -305,7 +312,7 @@ export class ServicioCaracterizacion {
       datos: r.datos,
       avance: r.avance,
       pcdNombre: r.pcd.nombre,
-      cuidadorNombre: r.cuidador.nombre,
+      cuidadorNombre: r.cuidador?.nombre ?? null,
     };
   }
 

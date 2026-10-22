@@ -32,9 +32,11 @@ export interface DatosPreinscripcion {
   pcdNombre: string;
   pcdTipoIdentificacionId: number;
   pcdNumero: string;
-  cuidadorNombre: string;
-  cuidadorTipoIdentificacionId: number;
-  cuidadorNumero: string;
+  /** Falso cuando la persona no tiene cuidador; entonces no se piden los datos del cuidador. */
+  tieneCuidador?: boolean;
+  cuidadorNombre?: string;
+  cuidadorTipoIdentificacionId?: number;
+  cuidadorNumero?: string;
   direccion?: string | null;
   localidadId?: number | null;
   barrioId?: number | null;
@@ -128,13 +130,16 @@ export class ServicioPreinscripcion {
       d.pcdTipoIdentificacionId,
       'TIPO_IDENTIFICACION',
     );
-    const cuiTipo = await solicitudesRepo.itemActivo(
-      pool,
-      d.cuidadorTipoIdentificacionId,
-      'TIPO_IDENTIFICACION',
-    );
+    const conCuidador = d.tieneCuidador !== false;
+    const cuiTipo = conCuidador
+      ? await solicitudesRepo.itemActivo(
+          pool,
+          d.cuidadorTipoIdentificacionId ?? 0,
+          'TIPO_IDENTIFICACION',
+        )
+      : null;
     const pcdNumero = normalizarNumero(d.pcdNumero);
-    const cuiNumero = normalizarNumero(d.cuidadorNumero);
+    const cuiNumero = normalizarNumero(d.cuidadorNumero ?? '');
     if (!pcdTipo)
       errores.push({
         campo: 'pcdTipoIdentificacionId',
@@ -149,12 +154,12 @@ export class ServicioPreinscripcion {
           mensaje: `Número de identificación de la persona con discapacidad: ${e.toLowerCase()}`,
         });
     }
-    if (!cuiTipo)
+    if (conCuidador && !cuiTipo)
       errores.push({
         campo: 'cuidadorTipoIdentificacionId',
         mensaje: 'Tipo de identificación del cuidador: elija una opción de la lista',
       });
-    else {
+    else if (cuiTipo) {
       const e = errorNumeroIdentificacion(cuiTipo.codigo, cuiNumero);
       if (e)
         errores.push({
@@ -206,12 +211,14 @@ export class ServicioPreinscripcion {
         pcdNumero,
         nombrePcd,
       );
-      const cuidadorId = await solicitudesRepo.personaParaIdentificacion(
-        tx,
-        (cuiTipo as { id: number }).id,
-        cuiNumero,
-        normalizarNombre(d.cuidadorNombre),
-      );
+      const cuidadorId = cuiTipo
+        ? await solicitudesRepo.personaParaIdentificacion(
+            tx,
+            cuiTipo.id,
+            cuiNumero,
+            normalizarNombre(d.cuidadorNombre ?? ''),
+          )
+        : null;
       if (await solicitudesRepo.porPcd(tx, vigencia.id, pcdId)) throw solicitudExistente();
       let id: number;
       try {

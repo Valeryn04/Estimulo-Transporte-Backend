@@ -13,7 +13,7 @@ export interface SolicitudFila {
   id: number;
   vigenciaId: number;
   pcdId: number;
-  cuidadorId: number;
+  cuidadorId: number | null;
   correo: string;
   estado: EstadoSolicitud;
   correoVerificadoAt: Date | null;
@@ -25,7 +25,7 @@ interface Fila {
   id: number;
   vigencia_id: number;
   pcd_id: number;
-  cuidador_id: number;
+  cuidador_id: number | null;
   correo: string;
   estado: EstadoSolicitud;
   correo_verificado_at: Date | null;
@@ -133,7 +133,7 @@ export const solicitudesRepo = {
     d: {
       vigenciaId: number;
       pcdId: number;
-      cuidadorId: number;
+      cuidadorId: number | null;
       direccion: string | null;
       localidadId: number | null;
       barrioId: number | null;

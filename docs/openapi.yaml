@@ -3607,9 +3607,6 @@ components:
           pcdNombre,
           pcdTipoIdentificacionId,
           pcdNumero,
-          cuidadorNombre,
-          cuidadorTipoIdentificacionId,
-          cuidadorNumero,
           correo,
           correoConfirmacion,
           aceptaAutorizacion,
@@ -3620,9 +3617,15 @@ components:
         pcdNombre: { type: string }
         pcdTipoIdentificacionId: { type: integer }
         pcdNumero: { type: string }
-        cuidadorNombre: { type: string }
-        cuidadorTipoIdentificacionId: { type: integer }
-        cuidadorNumero: { type: string }
+        tieneCuidador:
+          {
+            type: boolean,
+            description: 'false si la persona no tiene cuidador; si no se envía, se piden los datos del cuidador',
+          }
+        cuidadorNombre: { type: string, description: Obligatorio salvo que tieneCuidador sea false }
+        cuidadorTipoIdentificacionId:
+          { type: integer, description: Obligatorio salvo que tieneCuidador sea false }
+        cuidadorNumero: { type: string, description: Obligatorio salvo que tieneCuidador sea false }
         direccion:
           type: string
           nullable: true

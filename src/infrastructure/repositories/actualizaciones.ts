@@ -22,12 +22,12 @@ export interface SolicitudActualizable {
   localidad: string | null;
   barrio: string | null;
   correo: string;
-  cuidador_id: number;
+  cuidador_id: number | null;
   pcd_id: number;
   vigencia_id: number;
-  cuidador_nombre: string;
-  cuidador_numero: string;
-  cuidador_tipo: string;
+  cuidador_nombre: string | null;
+  cuidador_numero: string | null;
+  cuidador_tipo: string | null;
 }
 
 /** Actualización de datos del beneficiario (RF-BEN-05): cada cambio guarda el valor anterior, el nuevo y su soporte. */
@@ -128,8 +128,8 @@ export const actualizacionesRepo = {
               s.cuidador_id, s.pcd_id, s.vigencia_id, pc.nombre_completo AS cuidador_nombre,
               pc.numero_identificacion AS cuidador_numero, t.nombre AS cuidador_tipo
          FROM solicitudes s
-         JOIN personas pc ON pc.id = s.cuidador_id
-         JOIN catalogo_items t ON t.id = pc.tipo_identificacion_id
+         LEFT JOIN personas pc ON pc.id = s.cuidador_id
+         LEFT JOIN catalogo_items t ON t.id = pc.tipo_identificacion_id
          LEFT JOIN catalogo_items l ON l.id = s.localidad_id
          LEFT JOIN catalogo_items b ON b.id = s.barrio_id
         WHERE s.id = $1 FOR UPDATE OF s`,

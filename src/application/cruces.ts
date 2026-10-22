@@ -304,16 +304,17 @@ export class ServicioCruces {
   async alertas(
     db: Queryable,
     codigos: string[],
-    personas: { pcd: string; cuidador: string },
+    personas: { pcd: string; cuidador: string | null },
   ): Promise<AlertaCruce[]> {
     const huellaPcd = this.huella(personas.pcd);
-    const huellaCuidador = this.huella(personas.cuidador);
+    const huellaCuidador = personas.cuidador ? this.huella(personas.cuidador) : null;
     const salida: AlertaCruce[] = [];
     for (const codigo of [...new Set(codigos)]) {
-      const { estructura, coincidencias } = await crucesRepo.coincidencias(db, codigo, [
-        huellaPcd,
-        huellaCuidador,
-      ]);
+      const { estructura, coincidencias } = await crucesRepo.coincidencias(
+        db,
+        codigo,
+        huellaCuidador ? [huellaPcd, huellaCuidador] : [huellaPcd],
+      );
       const aplica = estructura?.aplicaA ?? 'AMBOS';
       salida.push({
         cruceCodigo: codigo,

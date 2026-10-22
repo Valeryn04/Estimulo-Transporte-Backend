@@ -67,7 +67,7 @@ export interface CasoBase {
   localidad: string | null;
   barrio: string | null;
   pcd: { id: number; nombre: string; tipo: string; numero: string };
-  cuidador: { id: number; nombre: string; tipo: string; numero: string };
+  cuidador: { id: number; nombre: string; tipo: string; numero: string } | null;
 }
 
 export interface ValidacionFila {
@@ -282,10 +282,10 @@ export const validacionRepo = {
       pcd_nombre: string;
       pcd_tipo: string;
       pcd_numero: string;
-      cui_id: number;
-      cui_nombre: string;
-      cui_tipo: string;
-      cui_numero: string;
+      cui_id: number | null;
+      cui_nombre: string | null;
+      cui_tipo: string | null;
+      cui_numero: string | null;
     }>(
       `SELECT s.id, s.estado, s.radicado, s.radicada_at, v.anio, s.correo, s.direccion,
               l.nombre AS localidad, b.nombre AS barrio,
@@ -295,8 +295,8 @@ export const validacionRepo = {
          JOIN vigencias v ON v.id = s.vigencia_id
          JOIN personas p ON p.id = s.pcd_id
          JOIN catalogo_items tp ON tp.id = p.tipo_identificacion_id
-         JOIN personas c ON c.id = s.cuidador_id
-         JOIN catalogo_items tc ON tc.id = c.tipo_identificacion_id
+         LEFT JOIN personas c ON c.id = s.cuidador_id
+         LEFT JOIN catalogo_items tc ON tc.id = c.tipo_identificacion_id
          LEFT JOIN catalogo_items l ON l.id = s.localidad_id
          LEFT JOIN catalogo_items b ON b.id = s.barrio_id
         WHERE s.id = $1`,
@@ -315,7 +315,15 @@ export const validacionRepo = {
       localidad: f.localidad,
       barrio: f.barrio,
       pcd: { id: f.pcd_id, nombre: f.pcd_nombre, tipo: f.pcd_tipo, numero: f.pcd_numero },
-      cuidador: { id: f.cui_id, nombre: f.cui_nombre, tipo: f.cui_tipo, numero: f.cui_numero },
+      cuidador:
+        f.cui_id === null
+          ? null
+          : {
+              id: f.cui_id,
+              nombre: f.cui_nombre as string,
+              tipo: f.cui_tipo as string,
+              numero: f.cui_numero as string,
+            },
     };
   },
 
