@@ -477,7 +477,21 @@ export class ServicioNovedades {
       if (!d.sinDescargos && vencido) {
         throw conflict('PLAZO_VENCIDO', 'El plazo para presentar descargos ya venció.');
       }
-      const hoy = (await entregasRepo.beneficio(tx, r.beneficioId))!.hoy;
+      const beneficio = (await entregasRepo.beneficio(tx, r.beneficioId))!;
+      const hoy = beneficio.hoy;
+      // Los descargos que presenta la persona desde el portal le llegan a quien lleva el trámite.
+      if (!d.sinDescargos && actor === null) {
+        await alertasRepo.crear(tx, {
+          tipo: 'DESCARGOS_RECIBIDOS',
+          permisoDestino: PERMISO_GESTOR,
+          titulo: `La persona presentó sus descargos (${beneficio.radicado})`,
+          mensaje: `${beneficio.pcdNombre} respondió el traslado de la revocatoria. Revise los descargos y decida.`,
+          enlace: `/interno/novedades/revocatorias/${id}`,
+          solicitudId: r.solicitudId,
+          beneficioId: r.beneficioId,
+          clave: `DESCARGOS_RECIBIDOS:${id}`,
+        });
+      }
       await revocatoriasRepo.evento(tx, {
         revocatoriaId: id,
         etapa: d.sinDescargos ? 'SIN_DESCARGOS' : 'DESCARGOS',

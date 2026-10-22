@@ -610,6 +610,18 @@ export class ServicioAsignacion {
         });
         resultado.push({ solicitudId: x.c.solicitudId, radicado: x.c.radicado, beneficioId });
       }
+      // Si con esta asignación se agotan los cupos, quien los administra se entera (por ejemplo, para pedir una adición).
+      if (resultado.length > 0 && fin.cuposTotales - fin.ocupados - resultado.length <= 0) {
+        await alertasRepo.crear(tx, {
+          tipo: 'CUPOS_AGOTADOS',
+          permisoDestino: 'cupos.administrar',
+          titulo: 'Se agotaron los cupos',
+          mensaje:
+            'Ya no quedan cupos disponibles: los casos que siguen pasan a la lista de espera. Si hay una adición, ajuste los cupos.',
+          enlace: '/interno/admin/cupos',
+          clave: `CUPOS_AGOTADOS:${vigenciaId}`,
+        });
+      }
       return resultado;
     });
     this.correos.despachar();

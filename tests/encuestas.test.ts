@@ -247,6 +247,11 @@ describe('encuestas de satisfacción (RF-NOV-04)', () => {
       (await e.pool.query(`SELECT 1 FROM encuesta_invitaciones WHERE token_hash = $1`, [tokenA]))
         .rowCount,
     ).toBe(0);
+    // Quienes consultan los resultados se enteran de la publicación; quien valida casos, no.
+    const avisosDe = async (c: CuentaPrueba) =>
+      (await request(e.app).get(`${adm}/alertas`).set(auth(c))).body.items as { tipo: string }[];
+    expect((await avisosDe(analista)).some((x) => x.tipo === 'ENCUESTA_PUBLICADA')).toBe(true);
+    expect((await avisosDe(validador)).some((x) => x.tipo === 'ENCUESTA_PUBLICADA')).toBe(false);
     expect((await accion(admin, id, 'publicar')).status).toBe(409);
     expect(
       (await request(e.app).put(`${adm}/encuestas/${id}`).set(auth(admin)).send(encuesta())).body

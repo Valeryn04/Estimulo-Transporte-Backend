@@ -181,6 +181,20 @@ export class ServicioSubsanacion {
         const f = r.rows[0];
         if (!f) return false;
         await validacionRepo.fijarEstado(tx, f.solicitud_id, 'NO_CUMPLE');
+        const asignado = await tx.query<{ a: number | null }>(
+          `SELECT asignado_a AS a FROM validaciones WHERE solicitud_id = $1`,
+          [f.solicitud_id],
+        );
+        const validador = asignado.rows[0]?.a ?? null;
+        await alertasRepo.crear(tx, {
+          tipo: 'SUBSANACION_VENCIDA',
+          permisoDestino: validador ? 'validacion.validar' : 'validacion.asignar',
+          usuarioDestino: validador,
+          titulo: `Venció el plazo de subsanación (${f.radicado})`,
+          mensaje: `${f.nombre} no respondió a tiempo: la solicitud pasó a «no cumple» por vencimiento de término.`,
+          enlace: `/interno/validacion/caso/${f.solicitud_id}`,
+          solicitudId: f.solicitud_id,
+        });
         await this.correos.encolar(tx, {
           solicitudId: f.solicitud_id,
           tipo: 'SUBSANACION_VENCIDA',

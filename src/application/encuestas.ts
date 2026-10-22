@@ -10,6 +10,7 @@ import {
 } from '../domain/encuestas.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { encuestasRepo, type Encuesta } from '../infrastructure/repositories/encuestas.js';
 import { conflict, notFound } from '../shared/errors.js';
@@ -187,6 +188,14 @@ export class ServicioEncuestas {
         valorNuevo: { estado: 'PUBLICADA', invitados },
         ip: ctx.ip,
       });
+      await alertasRepo.crear(tx, {
+        tipo: 'ENCUESTA_PUBLICADA',
+        permisoDestino: 'encuestas.resultados',
+        titulo: `Se publicó la encuesta «${e.titulo}»`,
+        mensaje: `Se invitó a ${invitados} beneficiario(s). Los resultados se irán llenando hasta el ${FECHA.format(new Date(`${e.vigenteHasta}T00:00:00Z`))}.`,
+        enlace: '/interno/encuestas',
+        clave: `ENCUESTA_PUBLICADA:${id}`,
+      });
       return invitados;
     });
     this.correos.despachar();
@@ -210,6 +219,14 @@ export class ServicioEncuestas {
         valorAnterior: { estado: 'PUBLICADA' },
         valorNuevo: { estado: 'CERRADA' },
         ip: ctx.ip,
+      });
+      await alertasRepo.crear(tx, {
+        tipo: 'ENCUESTA_CERRADA',
+        permisoDestino: 'encuestas.resultados',
+        titulo: `Se cerró la encuesta «${e.titulo}»`,
+        mensaje: 'Ya están completos los resultados.',
+        enlace: '/interno/encuestas',
+        clave: `ENCUESTA_CERRADA:${id}`,
       });
     });
     return this.obtener(id);

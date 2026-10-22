@@ -356,6 +356,15 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       );
       expect(b.rows[0].usuario_id).toBeNull();
       expect(b.rows[0].justificacion).toContain('vencimiento de término');
+      // Quien tenía el caso se entera de que venció el plazo.
+      const avisos = (await request(e.app).get(`${adm}/alertas`).set(auth(validador))).body
+        .items as {
+        tipo: string;
+        solicitudId: number | null;
+      }[];
+      expect(
+        avisos.some((x) => x.tipo === 'SUBSANACION_VENCIDA' && x.solicitudId === s.solicitudId),
+      ).toBe(true);
       expect((await e.servicios.subsanacion.revisarPlazos()).vencidas).toBe(0);
     });
   });
@@ -411,6 +420,14 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       const ev = detalle.body.eventos.find((x: { etapa: string }) => x.etapa === 'DESCARGOS');
       expect(ev.usuario).toBe('Persona beneficiaria');
       expect(ev.evidencia.nombre).toBe('prueba.pdf');
+      // Al gestor le llega el aviso de que la persona presentó sus descargos.
+      const avisos = (await request(e.app).get(`${adm}/alertas`).set(auth(gestor))).body.items as {
+        tipo: string;
+        enlace: string;
+      }[];
+      expect(avisos.find((x) => x.tipo === 'DESCARGOS_RECIBIDOS')?.enlace).toBe(
+        `/interno/novedades/revocatorias/${revId}`,
+      );
       const log = await e.pool.query(
         `SELECT usuario_id FROM bitacora WHERE accion = 'DESCARGOS_CIUDADANO'`,
       );
