@@ -209,6 +209,13 @@ async function validarSolicitud(radicado: string, token: string, i: number): Pro
   ).rows[0];
   if (!fila) throw new Error(`No se encontró ${radicado}`);
   const base = `${API}/admin/validacion/casos/${fila.id}`;
+  // Solo se revisa lo que el responsable asignó: aquí se deja asignado a la cuenta demo.validador.
+  await pool.query(
+    `INSERT INTO validaciones (solicitud_id, asignado_a, asignado_por, asignado_at)
+     SELECT $1, id, id, now() FROM usuarios WHERE usuario = 'demo.validador'
+     ON CONFLICT (solicitud_id) DO UPDATE SET asignado_a = EXCLUDED.asignado_a, asignado_por = EXCLUDED.asignado_por, asignado_at = now()`,
+    [fila.id],
+  );
   const caso = await json<{
     items: { id: number }[];
     priorizacion: { variables: { codigo: string; opciones: { codigo: string }[] }[] };

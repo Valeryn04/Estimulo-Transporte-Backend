@@ -611,11 +611,13 @@ export const alertasRepo = {
       solicitudId?: number | null;
       beneficioId?: number | null;
       clave?: string | null;
+      /** Si se indica, el aviso es solo de esa persona (y no de todos los que tienen el permiso). */
+      usuarioDestino?: number | null;
     },
   ): Promise<void> {
     await db.query(
-      `INSERT INTO alertas (tipo, permiso_destino, titulo, mensaje, enlace, solicitud_id, beneficio_id, clave)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+      `INSERT INTO alertas (tipo, permiso_destino, titulo, mensaje, enlace, solicitud_id, beneficio_id, clave, usuario_destino)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
       [
         a.tipo,
         a.permisoDestino,
@@ -625,11 +627,17 @@ export const alertasRepo = {
         a.solicitudId ?? null,
         a.beneficioId ?? null,
         a.clave ?? null,
+        a.usuarioDestino ?? null,
       ],
     );
   },
 
-  async pendientes(db: Queryable, permisos: string[], limite = 50): Promise<Alerta[]> {
+  async pendientes(
+    db: Queryable,
+    permisos: string[],
+    usuarioId: number,
+    limite = 50,
+  ): Promise<Alerta[]> {
     const r = await db.query<{
       id: string;
       tipo: string;
@@ -640,9 +648,10 @@ export const alertasRepo = {
       creada_at: Date;
     }>(
       `SELECT id, tipo, titulo, mensaje, enlace, solicitud_id, creada_at FROM alertas
-        WHERE atendida_at IS NULL AND permiso_destino = ANY($1::text[])
+        WHERE atendida_at IS NULL
+          AND ((usuario_destino IS NULL AND permiso_destino = ANY($1::text[])) OR usuario_destino = $3)
         ORDER BY creada_at DESC, id DESC LIMIT $2`,
-      [permisos, limite],
+      [permisos, limite, usuarioId],
     );
     return r.rows.map((x) => ({
       id: Number(x.id),
@@ -664,7 +673,8 @@ export const alertasRepo = {
   ): Promise<boolean> {
     const r = await db.query(
       `UPDATE alertas SET atendida_por = $3, atendida_at = now()
-        WHERE id = $1 AND atendida_at IS NULL AND permiso_destino = ANY($2::text[])`,
+        WHERE id = $1 AND atendida_at IS NULL
+          AND ((usuario_destino IS NULL AND permiso_destino = ANY($2::text[])) OR usuario_destino = $3)`,
       [id, permisos, usuarioId],
     );
     return r.rowCount === 1;

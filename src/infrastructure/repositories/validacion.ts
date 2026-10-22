@@ -29,7 +29,7 @@ export interface FilaBandeja {
 }
 
 export interface FiltroBandeja {
-  estado?: EstadoSolicitud;
+  estado?: EstadoSolicitud | 'TODOS';
   /** 'mios', 'sin' (sin asignar) o el id de un validador. */
   asignado?: 'mios' | 'sin' | number;
   q?: string;
@@ -181,11 +181,15 @@ export const validacionRepo = {
   async bandeja(db: Queryable, f: FiltroBandeja): Promise<{ items: FilaBandeja[]; total: number }> {
     const params: unknown[] = [];
     const tiempoMax = Math.trunc(Number(f.tiempoMaxDias));
-    const where: string[] = [
-      `(s.estado IN ('RADICADA', 'SUBSANADA', 'EN_REVISION')
+    // «Todos»: cualquier solicitud ya radicada, en el estado que esté. Si no, solo lo pendiente de revisar.
+    const where: string[] =
+      f.estado === 'TODOS'
+        ? [`s.estado NOT IN ('PREINSCRITA', 'CORREO_VERIFICADO')`]
+        : [
+            `(s.estado IN ('RADICADA', 'SUBSANADA', 'EN_REVISION')
         OR (s.estado = 'EN_SUBSANACION' AND ($${params.push(f.estado === 'EN_SUBSANACION')} OR sub.vence_at < now())))`,
-    ];
-    if (f.estado) {
+          ];
+    if (f.estado && f.estado !== 'TODOS') {
       params.push(f.estado);
       where.push(`s.estado = $${params.length}`);
     }
@@ -394,10 +398,15 @@ export const validacionRepo = {
     );
   },
 
-  async liberar(db: Queryable, solicitudId: number): Promise<void> {
+  async liberar(db: Queryable, solicitudId: number, quitarAsignacion = false): Promise<void> {
     await db.query(
-      `UPDATE validaciones SET tomada_por = NULL, tomada_at = NULL, updated_at = now() WHERE solicitud_id = $1`,
-      [solicitudId],
+      `UPDATE validaciones
+          SET tomada_por = NULL, tomada_at = NULL, updated_at = now(),
+              asignado_a = CASE WHEN $2 THEN NULL ELSE asignado_a END,
+              asignado_por = CASE WHEN $2 THEN NULL ELSE asignado_por END,
+              asignado_at = CASE WHEN $2 THEN NULL ELSE asignado_at END
+        WHERE solicitud_id = $1`,
+      [solicitudId, quitarAsignacion],
     );
   },
 
@@ -625,6 +634,7 @@ export const validacionRepo = {
   async usuariosConPermiso(
     db: Queryable,
     permiso: string,
+    sinAdministradores = false,
   ): Promise<{ id: number; usuario: string; nombres: string }[]> {
     const r = await db.query<{ id: number; usuario: string; nombres: string }>(
       `SELECT DISTINCT u.id, u.usuario, u.nombres
@@ -632,8 +642,11 @@ export const validacionRepo = {
          JOIN usuario_rol ur ON ur.usuario_id = u.id
          JOIN rol_permiso rp ON rp.rol_id = ur.rol_id
         WHERE rp.permiso_codigo = $1 AND u.estado = 'ACTIVO'
+          AND ($2::boolean = false OR NOT EXISTS (
+                SELECT 1 FROM usuario_rol x JOIN roles r ON r.id = x.rol_id
+                 WHERE x.usuario_id = u.id AND r.codigo = 'ADMINISTRADOR'))
         ORDER BY u.nombres`,
-      [permiso],
+      [permiso, sinAdministradores],
     );
     return r.rows;
   },

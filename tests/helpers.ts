@@ -119,3 +119,24 @@ export const auth = (cuenta: { token: string }) => ({ Authorization: `Bearer ${c
 
 /** Cabeceras que el portal agrega a las llamadas que usan la cookie de sesión. */
 export const desdePortal = { 'X-Requested-With': CABECERA_PORTAL };
+
+/**
+ * Deja un caso asignado a una persona directamente en la base de datos (la API solo asigna a validadores que no son
+ * administradores). Sirve para que las pruebas puedan «tomar» un caso sin repetir el reparto en cada una.
+ */
+export async function asignarEnBd(e: Entorno, solicitudId: number, usuarioId: number) {
+  await e.pool.query(
+    `INSERT INTO validaciones (solicitud_id, asignado_a, asignado_por, asignado_at)
+     VALUES ($1, $2, $2, now())
+     ON CONFLICT (solicitud_id) DO UPDATE SET asignado_a = $2, asignado_por = $2, asignado_at = now()`,
+    [solicitudId, usuarioId],
+  );
+}
+
+/** Igual que `asignarEnBd`, pero a partir del token de acceso de la persona. */
+export async function asignarAlToken(e: Entorno, solicitudId: number, token: string) {
+  const yo = await request(e.app)
+    .get('/api/v1/auth/me')
+    .set({ Authorization: `Bearer ${token}` });
+  await asignarEnBd(e, solicitudId, yo.body.id as number);
+}

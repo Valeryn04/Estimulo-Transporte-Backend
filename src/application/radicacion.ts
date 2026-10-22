@@ -1,3 +1,4 @@
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import { calcularAvance, datosVacios } from '../domain/caracterizacion.js';
@@ -99,6 +100,15 @@ export class ServicioRadicacion {
         tokenHash: createHash('sha256').update(seguro).digest('hex'),
         creadoAt: ahora(),
         expiraAt: new Date(ahora().getTime() + dias * 86_400_000),
+      });
+      await alertasRepo.crear(tx, {
+        tipo: 'CASO_RADICADO',
+        permisoDestino: 'validacion.asignar',
+        titulo: `Nueva solicitud radicada (${radicado.radicado})`,
+        mensaje: `${solicitud.pcd.nombre} radicó su solicitud y espera que la asigne a un validador.`,
+        enlace: '/interno/validacion',
+        solicitudId,
+        clave: `CASO_RADICADO:${solicitudId}`,
       });
       const d = ESTADOS.RADICADA;
       await this.correos.encolar(tx, {

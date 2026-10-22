@@ -1,3 +1,4 @@
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { ACCION, MODULO } from '../domain/acciones.js';
 import { ESTADOS, type EstadoSolicitud } from '../domain/estados.js';
@@ -267,8 +268,18 @@ export class ServicioSubsanacion {
 
       await validacionRepo.marcarRespondida(tx, sub.id);
       await validacionRepo.fijarEstado(tx, solicitudId, 'SUBSANADA');
-      await validacionRepo.asegurarYBloquear(tx, solicitudId);
+      const validacion = await validacionRepo.asegurarYBloquear(tx, solicitudId);
       await validacionRepo.fijarSubsanado(tx, solicitudId, true, true);
+      // Quien tenía el caso se entera de que la persona ya respondió; si no hay validador, el responsable.
+      await alertasRepo.crear(tx, {
+        tipo: 'SUBSANACION_RECIBIDA',
+        permisoDestino: validacion.asignadoA ? 'validacion.validar' : 'validacion.asignar',
+        usuarioDestino: validacion.asignadoA,
+        titulo: `La persona respondió la subsanación (${solicitud.radicado ?? ''})`.trim(),
+        mensaje: 'Ya puede revisar de nuevo el caso con lo que corrigió.',
+        enlace: `/interno/validacion/caso/${solicitudId}`,
+        solicitudId,
+      });
       await tokensRepo.crear(tx, {
         solicitudId,
         proposito: 'ENLACE_SEGURO',

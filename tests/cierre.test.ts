@@ -1,6 +1,13 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { auth, crearCuenta, crearEntorno, type CuentaPrueba, type Entorno } from './helpers.js';
+import {
+  asignarAlToken,
+  auth,
+  crearCuenta,
+  crearEntorno,
+  type CuentaPrueba,
+  type Entorno,
+} from './helpers.js';
 import { ayudantesSolicitud, bearer, pdf } from './solicitudes.js';
 
 const adm = '/api/v1/admin';
@@ -275,6 +282,7 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       const s = await ay.solicitudRadicada({ correo: 'plazo@correo.com' });
       const h = auth(validador);
       const v = `${adm}/validacion`;
+      await asignarAlToken(e, s.solicitudId, validador.token);
       const tomada = await request(e.app).post(`${v}/casos/${s.solicitudId}/tomar`).set(h).send();
       const items = tomada.body.items as { id: number; codigo: string }[];
       for (const i of items) {

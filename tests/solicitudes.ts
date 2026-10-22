@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { expect } from 'vitest';
-import type { Entorno } from './helpers.js';
+import { asignarAlToken, type Entorno } from './helpers.js';
 
 const pub = '/api/v1/publico';
 
@@ -153,6 +153,7 @@ export function ayudantesSolicitud(e: Entorno) {
     const s = await solicitudRadicada(opciones);
     const adm = '/api/v1/admin/validacion';
     const h = { Authorization: `Bearer ${validador.token}` };
+    await asignarAlToken(e, s.solicitudId, validador.token);
     const tomada = await request(e.app).post(`${adm}/casos/${s.solicitudId}/tomar`).set(h).send();
     expect(tomada.status, JSON.stringify(tomada.body)).toBe(200);
     const caso = tomada.body as {

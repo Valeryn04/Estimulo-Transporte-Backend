@@ -757,7 +757,7 @@ export class ServicioAsignacion {
   // ---------------------------------------------------------------- avisos internos
 
   async alertas(actor: Actor) {
-    const lista = await alertasRepo.pendientes(this.deps.pool, [...actor.permisos]);
+    const lista = await alertasRepo.pendientes(this.deps.pool, [...actor.permisos], actor.id);
     return lista.map((a) => ({ ...a, creadaAt: a.creadaAt.toISOString() }));
   }
 

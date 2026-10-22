@@ -1502,7 +1502,7 @@ paths:
         - {
             name: estado,
             in: query,
-            schema: { type: string, enum: [RADICADA, SUBSANADA, EN_REVISION, EN_SUBSANACION] },
+            schema: { type: string, enum: [RADICADA, SUBSANADA, EN_REVISION, EN_SUBSANACION, TODOS] },
           }
         - {
             name: asignado,

@@ -1,6 +1,13 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { auth, crearCuenta, crearEntorno, type CuentaPrueba, type Entorno } from './helpers.js';
+import {
+  asignarEnBd,
+  auth,
+  crearCuenta,
+  crearEntorno,
+  type CuentaPrueba,
+  type Entorno,
+} from './helpers.js';
 import { ayudantesSolicitud, bearer, pdf } from './solicitudes.js';
 
 const adm = '/api/v1/admin';
@@ -70,6 +77,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
 
   const caso = async (c: CuentaPrueba, id: number) => (await get(c, `/casos/${id}`)).body as Caso;
   const tomar = async (c: CuentaPrueba, id: number) => {
+    await asignarEnBd(e, id, c.id);
     const r = await post(c, `/casos/${id}/tomar`);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     return r.body as Caso;
@@ -142,7 +150,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
     it('muestra radicado, fecha, nombre, estado y días transcurridos, y permite filtrar y ordenar', async () => {
       const a = await ay.solicitudRadicada({ nombre: 'Zulema Torres' });
       const b = await ay.solicitudRadicada({ nombre: 'Ana Beltrán' });
-      const r = await get(validador, '/bandeja?tamano=100');
+      const r = await get(responsable, '/bandeja?tamano=100');
       expect(r.status).toBe(200);
       const fila = r.body.items.find((x: { radicado: string }) => x.radicado === a.radicado);
       expect(fila).toMatchObject({
@@ -155,14 +163,14 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
         subsanado: false,
       });
       expect(fila.radicadaAt).toBeTruthy();
-      const buscado = await get(validador, `/bandeja?q=${encodeURIComponent('beltr')}`);
+      const buscado = await get(responsable, `/bandeja?q=${encodeURIComponent('beltr')}`);
       expect(buscado.body.items.map((x: { radicado: string }) => x.radicado)).toEqual([b.radicado]);
-      const porNombre = await get(validador, '/bandeja?orden=nombre&direccion=asc&tamano=100');
+      const porNombre = await get(responsable, '/bandeja?orden=nombre&direccion=asc&tamano=100');
       const nombres = porNombre.body.items.map((x: { pcdNombre: string }) =>
         x.pcdNombre.toLowerCase(),
       );
       expect(nombres).toEqual([...nombres].sort());
-      const porRadicado = await get(validador, '/bandeja?q=' + a.radicado);
+      const porRadicado = await get(responsable, '/bandeja?q=' + a.radicado);
       expect(porRadicado.body.total).toBe(1);
     });
 
@@ -172,10 +180,10 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
         `UPDATE solicitudes SET radicada_at = now() - interval '9 days' WHERE id = $1`,
         [s.solicitudId],
       );
-      const r = await get(validador, `/bandeja?q=${s.radicado}`);
+      const r = await get(responsable, `/bandeja?q=${s.radicado}`);
       expect(r.body.tiempoMaxDias).toBe(5);
       expect(r.body.items[0]).toMatchObject({ dias: 9, superaTiempo: true });
-      const soloVencidas = await get(validador, '/bandeja?vencidas=true&tamano=100');
+      const soloVencidas = await get(responsable, '/bandeja?vencidas=true&tamano=100');
       expect(soloVencidas.body.items.map((x: { radicado: string }) => x.radicado)).toContain(
         s.radicado,
       );
@@ -207,7 +215,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       ).toBe(200);
       const mios = await get(validador, '/bandeja?asignado=mios&tamano=100');
       expect(mios.body.items.map((x: { radicado: string }) => x.radicado)).toContain(s.radicado);
-      const sin = await get(validador, '/bandeja?asignado=sin&tamano=100');
+      const sin = await get(responsable, '/bandeja?asignado=sin&tamano=100');
       expect(sin.body.items.map((x: { radicado: string }) => x.radicado)).not.toContain(s.radicado);
       // Otro validador no puede tomar un caso asignado a alguien más.
       const r = await post(otroValidador, `/casos/${s.solicitudId}/tomar`);
@@ -225,6 +233,57 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
         [s.solicitudId],
       );
       expect(b.rowCount).toBe(2);
+    });
+  });
+
+  describe('reparto de casos y avisos', () => {
+    it('el validador solo ve sus casos, el administrador no entra en el reparto y cada quien recibe su aviso', async () => {
+      const s = await ay.solicitudRadicada({ nombre: 'Aviso Reparto' });
+      const alertasDe = async (c: CuentaPrueba) =>
+        (await request(e.app).get(`${adm}/alertas`).set(auth(c))).body.items as {
+          tipo: string;
+          titulo: string;
+          solicitudId: number | null;
+        }[];
+      // Al radicarse, el aviso llega a quien asigna, no a quien valida.
+      expect(
+        (await alertasDe(responsable)).some(
+          (a) => a.tipo === 'CASO_RADICADO' && a.solicitudId === s.solicitudId,
+        ),
+      ).toBe(true);
+      expect((await alertasDe(validador)).some((a) => a.solicitudId === s.solicitudId)).toBe(false);
+      // Sin asignar, el validador no ve el caso en su bandeja.
+      const antes = await get(validador, '/bandeja?tamano=100');
+      expect(antes.body.items.map((x: { radicado: string }) => x.radicado)).not.toContain(
+        s.radicado,
+      );
+      // El administrador no es un validador al que se pueda asignar.
+      const lista = await get(responsable, '/validadores');
+      expect(lista.body.items.map((u: { id: number }) => u.id)).not.toContain(administrador.id);
+      expect(
+        (
+          await post(responsable, '/asignar', {
+            solicitudIds: [s.solicitudId],
+            validadorId: administrador.id,
+          })
+        ).status,
+      ).toBe(422);
+      // Al asignar, el aviso es solo del validador elegido.
+      await post(responsable, '/asignar', {
+        solicitudIds: [s.solicitudId],
+        validadorId: validador.id,
+      });
+      const suyas = await alertasDe(validador);
+      expect(
+        suyas.some((a) => a.tipo === 'CASOS_ASIGNADOS' && a.solicitudId === s.solicitudId),
+      ).toBe(true);
+      expect((await alertasDe(otroValidador)).some((a) => a.solicitudId === s.solicitudId)).toBe(
+        false,
+      );
+      const despues = await get(validador, '/bandeja?tamano=100');
+      expect(despues.body.items.map((x: { radicado: string }) => x.radicado)).toContain(s.radicado);
+      // El administrador no puede tomarlo: no es suyo.
+      expect((await post(administrador, `/casos/${s.solicitudId}/tomar`)).status).toBe(409);
     });
   });
 
@@ -260,6 +319,20 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       // Al devolverlo a la bandeja queda libre otra vez.
       expect((await post(validador, `/casos/${s.solicitudId}/liberar`)).status).toBe(204);
       expect(await estadoDe(s.solicitudId)).toBe('RADICADA');
+      // Devolverlo también quita la asignación: nadie lo puede tomar hasta que el responsable lo asigne de nuevo.
+      const sinAsignar = await post(otroValidador, `/casos/${s.solicitudId}/tomar`);
+      expect(sinAsignar.status).toBe(409);
+      expect(sinAsignar.body.error.codigo).toBe('CASO_ASIGNADO');
+      expect(
+        (await get(responsable, `/bandeja?asignado=sin&tamano=100`)).body.items.map(
+          (x: { radicado: string }) => x.radicado,
+        ),
+      ).toContain(s.radicado);
+      expect((await post(validador, `/casos/${s.solicitudId}/tomar`)).status).toBe(409);
+      await post(responsable, '/asignar', {
+        solicitudIds: [s.solicitudId],
+        validadorId: otroValidador.id,
+      });
       expect((await post(otroValidador, `/casos/${s.solicitudId}/tomar`)).status).toBe(200);
     });
 
@@ -712,7 +785,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const c3 = await tomar(validador, tercero.solicitudId);
       expect(c3.items.map((i) => i.codigo)).not.toContain('COM_CONSTANCIA_DE_CONVIVENCIA');
       const b = await e.pool.query(
-        `SELECT accion FROM bitacora WHERE entidad = 'requisito' AND entidad_id = $1 ORDER BY id`,
+        `SELECT accion FROM bitacora WHERE entidad = 'requisito' AND entidad_id = $1 AND accion LIKE 'REQUISITO_%' ORDER BY id`,
         [String(id)],
       );
       expect(b.rows.map((x) => x.accion)).toEqual([

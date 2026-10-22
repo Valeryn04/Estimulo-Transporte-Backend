@@ -1,7 +1,14 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { interpretarCruce, normalizarIdentificacion } from '../src/domain/cruces.js';
-import { auth, crearCuenta, crearEntorno, type CuentaPrueba, type Entorno } from './helpers.js';
+import {
+  asignarEnBd,
+  auth,
+  crearCuenta,
+  crearEntorno,
+  type CuentaPrueba,
+  type Entorno,
+} from './helpers.js';
 import { ayudantesSolicitud } from './solicitudes.js';
 
 const adm = '/api/v1/admin';
@@ -187,6 +194,7 @@ describe('archivos de cruce (RF-ADM-05) y alertas de la validación (RF-VAL-03)'
     const s = await ay.solicitudRadicada();
     const est = await estructura('BENEFICIOS_INCOMPATIBLES');
     // Al tomar el caso se arma su lista de chequeo, con el requisito que usa este cruce.
+    await asignarEnBd(e, s.solicitudId, validador.id);
     await request(e.app)
       .post(`${adm}/validacion/casos/${s.solicitudId}/tomar`)
       .set(auth(validador));

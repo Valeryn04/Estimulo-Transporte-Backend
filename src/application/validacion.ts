@@ -1,3 +1,4 @@
+import { alertasRepo } from '../infrastructure/repositories/asignacion.js';
 import { ServicioCruces } from './cruces.js';
 import type { ServicioPriorizacion } from './priorizacion.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -113,7 +114,8 @@ export class ServicioValidacion {
 
   /** Validadores a quienes se puede asignar un caso. */
   validadores() {
-    return validacionRepo.usuariosConPermiso(this.deps.pool, 'validacion.validar');
+    // El administrador tiene todos los permisos pero no hace parte del reparto de casos.
+    return validacionRepo.usuariosConPermiso(this.deps.pool, 'validacion.validar', true);
   }
 
   /** El responsable del proceso asigna o reasigna casos entre validadores (RF-VAL-01). */
@@ -126,7 +128,9 @@ export class ServicioValidacion {
     const { pool } = this.deps;
     if (
       validadorId !== null &&
-      !(await validacionRepo.tienePermiso(pool, validadorId, 'validacion.validar'))
+      !(await validacionRepo.usuariosConPermiso(pool, 'validacion.validar', true)).some(
+        (u) => u.id === validadorId,
+      )
     ) {
       throw errorValidacion([
         { campo: 'validadorId', mensaje: 'Validador: elija a una persona que pueda validar casos' },
@@ -159,6 +163,24 @@ export class ServicioValidacion {
           valorAnterior: { asignadoA: antes.asignadoA },
           valorNuevo: { asignadoA: validadorId },
           ip: ctx.ip,
+        });
+      }
+      if (validadorId !== null && solicitudIds.length > 0) {
+        // El validador se entera en su campana de lo que se le asignó.
+        await alertasRepo.crear(tx, {
+          tipo: 'CASOS_ASIGNADOS',
+          permisoDestino: 'validacion.validar',
+          usuarioDestino: validadorId,
+          titulo:
+            solicitudIds.length === 1
+              ? 'Se le asignó un caso para validar'
+              : `Se le asignaron ${solicitudIds.length} casos para validar`,
+          mensaje: 'Revíselos en su bandeja de validación.',
+          enlace:
+            solicitudIds.length === 1
+              ? `/interno/validacion/caso/${solicitudIds[0]}`
+              : '/interno/validacion',
+          solicitudId: solicitudIds.length === 1 ? (solicitudIds[0] ?? null) : null,
         });
       }
     });
@@ -197,14 +219,13 @@ export class ServicioValidacion {
           { enRevisionPor: v.tomadaNombre },
         );
       }
-      if (
-        v.asignadoA !== null &&
-        v.asignadoA !== actor.id &&
-        !actor.permisos.has('validacion.asignar')
-      ) {
+      if (v.asignadoA !== actor.id) {
+        // Solo el validador a quien el responsable le asignó el caso lo puede revisar.
         throw conflict(
           'CASO_ASIGNADO',
-          `El caso está asignado a ${v.asignadoNombre ?? 'otro validador'}.`,
+          v.asignadoA === null
+            ? 'El caso no está asignado a ningún validador: el responsable del proceso debe asignarlo.'
+            : `El caso está asignado a ${v.asignadoNombre ?? 'otro validador'}.`,
           { asignadoA: v.asignadoNombre },
         );
       }
@@ -246,10 +267,19 @@ export class ServicioValidacion {
       if (v.tomadaPor !== actor.id && !actor.permisos.has('validacion.asignar')) {
         throw forbidden('Solo quien lo está revisando puede devolver el caso a la bandeja.');
       }
-      await validacionRepo.liberar(tx, solicitudId);
+      // Devolver el caso también quita la asignación: el responsable decide a quién se lo da ahora.
+      await validacionRepo.liberar(tx, solicitudId, true);
       if (base.estado === 'EN_REVISION') {
         await validacionRepo.fijarEstado(tx, solicitudId, v.subsanado ? 'SUBSANADA' : 'RADICADA');
       }
+      await alertasRepo.crear(tx, {
+        tipo: 'CASO_DEVUELTO',
+        permisoDestino: 'validacion.asignar',
+        titulo: `Un caso volvió a la bandeja (${base.radicado ?? ''})`.trim(),
+        mensaje: `${actor.nombres} lo devolvió sin decidir. Asígnelo de nuevo a un validador.`,
+        enlace: '/interno/validacion',
+        solicitudId,
+      });
       await bitacoraRepo.registrar(tx, {
         usuarioId: actor.id,
         modulo: MODULO.VALIDACION,

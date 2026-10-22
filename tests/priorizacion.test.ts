@@ -7,7 +7,14 @@ import {
   puntajeMaximo,
   type VariableMatriz,
 } from '../src/domain/priorizacion.js';
-import { auth, crearCuenta, crearEntorno, type CuentaPrueba, type Entorno } from './helpers.js';
+import {
+  asignarEnBd,
+  auth,
+  crearCuenta,
+  crearEntorno,
+  type CuentaPrueba,
+  type Entorno,
+} from './helpers.js';
 import { ayudantesSolicitud, pdf } from './solicitudes.js';
 
 const adm = '/api/v1/admin';
@@ -170,6 +177,7 @@ describe('priorización (RF-PRI-01..04)', () => {
   /** Lleva una solicitud hasta quedar validada, con los datos de priorización indicados. */
   async function validada(valores: Valores = {}, nombre = 'María Fernanda Pérez') {
     const s = await ay.solicitudRadicada({ nombre });
+    await asignarEnBd(e, s.solicitudId, validador.id);
     await valPost(validador, `/casos/${s.solicitudId}/tomar`);
     const caso = (await val(validador, `/casos/${s.solicitudId}`)).body;
     for (const item of caso.items) {
@@ -201,6 +209,7 @@ describe('priorización (RF-PRI-01..04)', () => {
   describe('datos que registra el validador y cálculo automático al validar (RF-PRI-01)', () => {
     it('el caso pide los datos de la matriz vigente y no se aprueba sin ellos', async () => {
       const s = await ay.solicitudRadicada();
+      await asignarEnBd(e, s.solicitudId, validador.id);
       await valPost(validador, `/casos/${s.solicitudId}/tomar`);
       const caso = (await val(validador, `/casos/${s.solicitudId}`)).body;
       expect(caso.priorizacion.matrizVersion).toBe(1);

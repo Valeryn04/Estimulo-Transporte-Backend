@@ -6,7 +6,13 @@ import { requierePermisos } from '../middlewares/auth.js';
 import { contexto, idParam, paginacionSchema } from '../utilidades.js';
 import { enviarArchivo } from '../subida.js';
 
-const ESTADOS_BANDEJA = ['RADICADA', 'SUBSANADA', 'EN_REVISION', 'EN_SUBSANACION'] as const;
+const ESTADOS_BANDEJA = [
+  'RADICADA',
+  'SUBSANADA',
+  'EN_REVISION',
+  'EN_SUBSANACION',
+  'TODOS',
+] as const;
 
 const bandejaSchema = paginacionSchema.extend({
   estado: z.enum(ESTADOS_BANDEJA).optional(),
@@ -70,9 +76,11 @@ export function rutasValidacion(s: Servicios): Router {
         : f.asignado === 'mios' || f.asignado === 'sin'
           ? f.asignado
           : Number(f.asignado);
+    // Quien valida (sin permiso de asignar) solo ve los casos que le asignaron.
+    const soloLosSuyos = !req.actor!.permisos.has('validacion.asignar');
     const { items, total, tiempoMaxDias } = await s.validacion.bandeja({
       estado: f.estado,
-      asignado,
+      asignado: soloLosSuyos ? 'mios' : asignado,
       q: f.q || undefined,
       soloVencidas: f.vencidas === 'true',
       orden: f.orden,
