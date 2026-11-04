@@ -163,7 +163,7 @@ describe('caracterización de la PCD y del cuidador (RF-CAR-01, RF-CAR-02, RF-CA
       expect(c.escolaridades.at(0)?.nombre).toBe('Educación inicial');
       expect(c.escolaridades.map((x) => x.nombre)).toContain('Doctorado');
       expect(c.ocupaciones.map((x) => x.nombre)).toContain('Ama de casa');
-      expect(c.tiposTransporte.map((x) => x.nombre)).toEqual(['Transmetro', 'SiBus']);
+      expect(c.tiposTransporte.map((x) => x.nombre)).toEqual(['Transmetro']);
       expect(c.eps.length).toBeGreaterThan(0);
       expect(r.body.avance).toMatchObject({ completados: 0, porcentaje: 0, completa: false });
       // Sin cuidador marcado todavía, la sección del cuidador no aparece (RF-CAR-02).

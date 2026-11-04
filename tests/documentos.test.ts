@@ -179,7 +179,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       expect(sin.documentos.map((d) => d.codigo)).toEqual(
         expect.arrayContaining(['PCD_DOCUMENTO_IDENTIDAD', 'COMUN_CARTA_SOLICITUD']),
       );
-      expect(sin.resumen).toMatchObject({ obligatorios: 3, cargados: 0, completo: false });
+      expect(sin.resumen).toMatchObject({ obligatorios: 4, cargados: 0, completo: false });
       await caracterizar(p.token, true).catch(() => undefined);
       const c = (await request(e.app).get(`${pub}/caracterizacion`).set(bearer(p.token))).body;
       await request(e.app).patch(`${pub}/caracterizacion`).set(bearer(p.token)).send({
@@ -191,7 +191,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       });
       const con = await lista(p.token);
       expect(con.documentos.map((d) => d.aplicaA)).toContain('CUIDADOR');
-      expect(con.resumen.obligatorios).toBe(4);
+      expect(con.resumen.obligatorios).toBe(6);
     });
 
     it('trae las reglas vigentes (formatos y tamaño) y cada documento con su estado pendiente', async () => {
@@ -529,7 +529,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       const r = await request(e.app).get(`${pub}/caracterizacion/revision`).set(bearer(p.token));
       expect(r.body.completo).toBe(false);
       expect(r.body.datos).toEqual([]);
-      expect(r.body.documentos).toHaveLength(3);
+      expect(r.body.documentos).toHaveLength(4);
       expect(r.body.documentos[0].campo).toMatch(/^documento:\d+$/);
     });
 
@@ -871,7 +871,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
         'COMUN_CARTA_SOLICITUD',
         'CUIDADOR_CARTA_CUIDADO',
       ]);
-      expect(l.resumen.obligatorios).toBe(4);
+      expect(l.resumen.obligatorios).toBe(6);
       const r = await subir(p.token, cartas[0]!.id, pdf(), 'carta.pdf');
       expect(r.status).toBe(409);
       expect(r.body.error.codigo).toBe('DOCUMENTO_GENERADO');
