@@ -201,6 +201,10 @@ export interface DocumentoRequerido {
   obligatorio: boolean;
   activo: boolean;
   version: number;
+  /** Hojas que debe tener el documento (el certificado de discapacidad trae dos). */
+  hojasMinimas: number;
+  /** Carta que genera el sistema: no se sube. */
+  generado: 'CARTA_SOLICITUD' | 'CARTA_CUIDADO' | null;
 }
 
 interface FilaDoc {
@@ -212,6 +216,8 @@ interface FilaDoc {
   obligatorio: boolean;
   activo: boolean;
   version: number;
+  hojas_minimas: number;
+  generado: DocumentoRequerido['generado'];
 }
 
 const mapearDoc = (f: FilaDoc): DocumentoRequerido => ({
@@ -223,15 +229,19 @@ const mapearDoc = (f: FilaDoc): DocumentoRequerido => ({
   obligatorio: f.obligatorio,
   activo: f.activo,
   version: f.version,
+  hojasMinimas: f.hojas_minimas,
+  generado: f.generado,
 });
 
-const COLS_DOC = 'id, codigo, nombre, descripcion, aplica_a, obligatorio, activo, version';
+const COLS_DOC =
+  'id, codigo, nombre, descripcion, aplica_a, obligatorio, activo, version, hojas_minimas, generado';
 
 export interface DatosDocumento {
   nombre: string;
   descripcion: string;
   aplicaA: AplicaA;
   obligatorio: boolean;
+  hojasMinimas: number;
 }
 
 export const documentosRepo = {
@@ -252,9 +262,9 @@ export const documentosRepo = {
 
   async crear(db: Queryable, codigo: string, d: DatosDocumento): Promise<number> {
     const r = await db.query<{ id: number }>(
-      `INSERT INTO documentos_requeridos (codigo, nombre, descripcion, aplica_a, obligatorio)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [codigo, d.nombre, d.descripcion, d.aplicaA, d.obligatorio],
+      `INSERT INTO documentos_requeridos (codigo, nombre, descripcion, aplica_a, obligatorio, hojas_minimas)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [codigo, d.nombre, d.descripcion, d.aplicaA, d.obligatorio, d.hojasMinimas],
     );
     return (r.rows[0] as { id: number }).id;
   },
@@ -262,8 +272,8 @@ export const documentosRepo = {
   async actualizar(db: Queryable, id: number, d: DatosDocumento): Promise<void> {
     await db.query(
       `UPDATE documentos_requeridos
-          SET nombre = $2, descripcion = $3, aplica_a = $4, obligatorio = $5 WHERE id = $1`,
-      [id, d.nombre, d.descripcion, d.aplicaA, d.obligatorio],
+          SET nombre = $2, descripcion = $3, aplica_a = $4, obligatorio = $5, hojas_minimas = $6 WHERE id = $1`,
+      [id, d.nombre, d.descripcion, d.aplicaA, d.obligatorio, d.hojasMinimas],
     );
   },
 

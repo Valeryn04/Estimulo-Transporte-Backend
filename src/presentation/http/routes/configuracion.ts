@@ -30,6 +30,12 @@ const documentoSchema = z.object({
   descripcion: z.string().trim().max(500, 'Descripción: máximo 500 caracteres').default(''),
   aplicaA: z.enum(['PCD', 'CUIDADOR', 'COMUN'], { error: 'Aplica a: elija una opción' }),
   obligatorio: z.boolean({ error: 'Obligatorio: indique si es obligatorio' }),
+  hojasMinimas: z
+    .number({ error: 'Hojas: escriba un número entre 1 y 10' })
+    .int('Hojas: escriba un número entero')
+    .min(1, 'Hojas: mínimo 1')
+    .max(10, 'Hojas: máximo 10')
+    .default(1),
 });
 
 const requisitoSchema = z.object({

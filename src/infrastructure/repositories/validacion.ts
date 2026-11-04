@@ -70,6 +70,15 @@ export interface CasoBase {
   cuidador: { id: number; nombre: string; tipo: string; numero: string } | null;
 }
 
+export interface Duplicidad {
+  tipo: 'CUIDADOR_ES_PCD' | 'PCD_ES_CUIDADOR' | 'CUIDADOR_COMPARTIDO' | 'BENEFICIO_VIGENTE';
+  solicitudId: number;
+  radicado: string | null;
+  estado: EstadoSolicitud;
+  /** A quién se refiere: la persona con discapacidad o el cuidador de este caso. */
+  persona: 'PCD' | 'CUIDADOR';
+}
+
 export interface ValidacionFila {
   solicitudId: number;
   asignadoA: number | null;
@@ -176,6 +185,48 @@ export interface DecisionFila {
 }
 
 export const validacionRepo = {
+  /**
+   * Otras solicitudes de la vigencia (o beneficios vigentes) donde aparecen la persona con discapacidad o su cuidador:
+   * un cuidador que también es persona con discapacidad, uno que cuida a más de una, o quien ya recibe un beneficio.
+   */
+  async duplicidades(db: Queryable, solicitudId: number): Promise<Duplicidad[]> {
+    const r = await db.query<{
+      tipo: Duplicidad['tipo'];
+      solicitud_id: number;
+      radicado: string | null;
+      estado: EstadoSolicitud;
+      persona: 'PCD' | 'CUIDADOR';
+    }>(
+      `SELECT CASE WHEN o.pcd_id = s.cuidador_id THEN 'CUIDADOR_ES_PCD'
+                   WHEN o.cuidador_id = s.pcd_id THEN 'PCD_ES_CUIDADOR'
+                   ELSE 'CUIDADOR_COMPARTIDO' END AS tipo,
+              o.id AS solicitud_id, o.radicado, o.estado,
+              CASE WHEN o.cuidador_id = s.pcd_id THEN 'PCD' ELSE 'CUIDADOR' END AS persona
+         FROM solicitudes s
+         JOIN solicitudes o ON o.vigencia_id = s.vigencia_id AND o.id <> s.id
+        WHERE s.id = $1
+          AND ((s.cuidador_id IS NOT NULL AND (o.pcd_id = s.cuidador_id OR o.cuidador_id = s.cuidador_id))
+               OR o.cuidador_id = s.pcd_id)
+       UNION ALL
+       SELECT 'BENEFICIO_VIGENTE', b.solicitud_id, sb.radicado, sb.estado,
+              CASE WHEN bp.persona_id = s.pcd_id THEN 'PCD' ELSE 'CUIDADOR' END
+         FROM solicitudes s
+         JOIN beneficio_personas bp ON bp.persona_id IN (s.pcd_id, s.cuidador_id) AND bp.vigente
+         JOIN beneficios b ON b.id = bp.beneficio_id AND b.solicitud_id <> s.id
+         JOIN solicitudes sb ON sb.id = b.solicitud_id
+        WHERE s.id = $1
+        ORDER BY 1, 2`,
+      [solicitudId],
+    );
+    return r.rows.map((f) => ({
+      tipo: f.tipo,
+      solicitudId: f.solicitud_id,
+      radicado: f.radicado,
+      estado: f.estado,
+      persona: f.persona,
+    }));
+  },
+
   // ---------------------------------------------------------------- bandeja
 
   async bandeja(db: Queryable, f: FiltroBandeja): Promise<{ items: FilaBandeja[]; total: number }> {

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { expect } from 'vitest';
-import { asignarAlToken, type Entorno } from './helpers.js';
+import { asignarAlToken, pdfConHojas, type Entorno } from './helpers.js';
 
 const pub = '/api/v1/publico';
 
@@ -15,6 +15,8 @@ export interface DocumentoPrueba {
   nombre: string;
   aplicaA: string;
   obligatorio: boolean;
+  generado: boolean;
+  hojasMinimas: number;
   estado: string;
 }
 
@@ -119,8 +121,9 @@ export function ayudantesSolicitud(e: Entorno) {
   }
 
   async function cargarTodos(t: string) {
-    for (const d of (await lista(t)).documentos.filter((x) => x.obligatorio)) {
-      const r = await subir(t, d.id, pdf(d.codigo), `${d.codigo}.pdf`);
+    for (const d of (await lista(t)).documentos.filter((x) => x.obligatorio && !x.generado)) {
+      const contenido = d.hojasMinimas > 1 ? await pdfConHojas(d.hojasMinimas) : pdf(d.codigo);
+      const r = await subir(t, d.id, contenido, `${d.codigo}.pdf`);
       expect(r.status, JSON.stringify(r.body)).toBe(201);
     }
   }

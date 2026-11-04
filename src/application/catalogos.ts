@@ -325,6 +325,7 @@ export class ServicioCatalogos {
           descripcion: actual.descripcion,
           aplicaA: actual.aplicaA as AplicaA,
           obligatorio: actual.obligatorio,
+          hojasMinimas: actual.hojasMinimas,
         },
         valorNuevo: d,
         ip: ctx.ip,

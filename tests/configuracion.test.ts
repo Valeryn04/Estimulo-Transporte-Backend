@@ -296,6 +296,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'sesion_inactividad_minutos',
         'sesion_maxima_horas',
         'subsanacion_recordatorio_dias',
+        'tarjeta_digitos',
         'tarjeta_prefijo',
         'tiempo_max_atencion_dias',
         'verificacion_correo_horas',

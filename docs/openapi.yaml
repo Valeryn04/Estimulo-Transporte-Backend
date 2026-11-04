@@ -378,6 +378,22 @@ paths:
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
+  /publico/caracterizacion/documentos/{documentoId}/carta:
+    get:
+      tags: [Portal ciudadano]
+      summary: Ver la carta que genera el sistema con los datos escritos
+      description: 'Carta de solicitud de preinscripción o carta de cuidado y contacto, armada con lo que la persona ha escrito hasta ahora. No hay que cargarla: se adjunta sola al enviar la solicitud.'
+      security: [{ bearerCiudadano: [] }]
+      parameters:
+        - { name: documentoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Carta en PDF
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
   /publico/caracterizacion/revision:
     get:
       tags: [Portal ciudadano]
@@ -2323,6 +2339,22 @@ paths:
         '204': { description: Atendido }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+  /admin/asignacion/actas-entrega:
+    get:
+      tags: [Asignación]
+      summary: Planilla de entrega para firmar el día de la entrega
+      description: 'PDF con una fila por cada persona que debe recibir su tarjeta (beneficios indicados en «beneficios», separados por comas), con espacio para el identificador, quién recibe y la firma. Después se fotografía o escanea y se adjunta al registrar la entrega.'
+      security: [{ bearerInterno: [] }]
+      parameters:
+        - { name: beneficios, in: query, required: true, schema: { type: string, example: '1,2,3' } }
+      responses:
+        '200':
+          description: Planilla en PDF
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '422': { $ref: '#/components/responses/Validacion' }
   /admin/asignacion/beneficiarios/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }

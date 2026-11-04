@@ -13,7 +13,10 @@ import {
   nombreSeguro,
   type FormatoDocumento,
 } from '../domain/archivos.js';
+import { PDFDocument } from 'pdf-lib';
+import { cartaCuidado, cartaSolicitud, type CartaGenerada } from '../domain/cartas.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
+import { renderCarta } from '../infrastructure/pdf/documentos.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { caracterizacionRepo } from '../infrastructure/repositories/caracterizacion.js';
 import {
@@ -28,6 +31,19 @@ import { AlmacenArchivos } from '../infrastructure/storage/almacen.js';
 import { AppError, conflict, notFound } from '../shared/errors.js';
 import type { ContextoPeticion, Dependencias } from './contexto.js';
 import { errorValidacion } from './esquemas.js';
+
+/** Cuántas hojas tiene un PDF; null si no se puede leer. */
+async function contarHojas(contenido: Buffer): Promise<number | null> {
+  try {
+    const pdf = await PDFDocument.load(contenido, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+    return pdf.getPageCount();
+  } catch {
+    return null;
+  }
+}
 
 export interface ArchivoEntrada {
   contenido: Buffer;
@@ -114,6 +130,8 @@ export class ServicioDocumentos {
           }
         : null,
       tieneModelo,
+      generado: d.generado !== null,
+      hojasMinimas: d.hojasMinimas,
     };
   }
 
@@ -134,7 +152,8 @@ export class ServicioDocumentos {
     const documentos = exigidos.map((d) =>
       this.entrada(d, porDoc.get(d.id), reemplazos.get(d.id) ?? 0, conModelo.has(d.id)),
     );
-    const obligatorios = documentos.filter((d) => d.obligatorio);
+    // Las cartas las genera el sistema al enviar la solicitud: no son algo que falte cargar.
+    const obligatorios = documentos.filter((d) => d.obligatorio && !d.generado);
     return {
       editable: edicion.modo !== 'NINGUNO',
       // Con una subsanación vigente solo se cargan los documentos señalados.
@@ -157,11 +176,14 @@ export class ServicioDocumentos {
   /** Documentos obligatorios que todavía no tienen un archivo vigente (los que impiden radicar). */
   async faltantes(solicitudId: number) {
     const lista = await this.listar(solicitudId);
-    return lista.documentos.filter((d) => d.obligatorio && d.estado !== 'CARGADO');
+    return lista.documentos.filter((d) => d.obligatorio && !d.generado && d.estado !== 'CARGADO');
   }
 
   /** Valida el archivo por su contenido real, su tamaño y los formatos vigentes. */
-  private async validar(archivo: ArchivoEntrada): Promise<{
+  private async validar(
+    archivo: ArchivoEntrada,
+    hojasMinimas = 1,
+  ): Promise<{
     formato: FormatoDocumento;
     nombre: string;
   }> {
@@ -193,6 +215,34 @@ export class ServicioDocumentos {
           mensaje: `El archivo no corresponde a su extensión (.${ext}): su contenido es ${formato.toUpperCase()}. Revise que sea el documento correcto.`,
         },
       ]);
+    }
+    if (hojasMinimas > 1) {
+      if (formato !== 'pdf') {
+        throw errorValidacion([
+          {
+            campo,
+            mensaje: `Este documento debe tener ${hojasMinimas} hojas: cárguelo en un solo PDF que las incluya todas.`,
+          },
+        ]);
+      }
+      const hojas = await contarHojas(archivo.contenido);
+      if (hojas === null) {
+        throw errorValidacion([
+          {
+            campo,
+            mensaje:
+              'No pudimos leer el PDF para contar sus hojas. Revise que no esté dañado ni protegido con contraseña.',
+          },
+        ]);
+      }
+      if (hojas < hojasMinimas) {
+        throw errorValidacion([
+          {
+            campo,
+            mensaje: `El archivo tiene ${hojas} hoja(s) y este documento debe tener ${hojasMinimas}: cárguelo completo, con todas sus hojas en un solo PDF (por ejemplo, el certificado de discapacidad trae dos y la segunda lleva un código QR).`,
+          },
+        ]);
+      }
     }
     return { formato, nombre: nombreSeguro(archivo.nombre) };
   }
@@ -255,7 +305,13 @@ export class ServicioDocumentos {
         'Ese documento no se pide porque no requiere el servicio para el cuidador.',
       );
     }
-    const { formato, nombre } = await this.validar(archivo);
+    if (documento.generado) {
+      throw conflict(
+        'DOCUMENTO_GENERADO',
+        'Ese documento lo genera el sistema con sus datos: no tiene que cargarlo.',
+      );
+    }
+    const { formato, nombre } = await this.validar(archivo, documento.hojasMinimas);
     const sha256 = createHash('sha256').update(archivo.contenido).digest('hex');
     const ruta = this.almacen.nuevaClave(`solicitudes/${solicitudId}`);
     await this.almacen.guardar(ruta, this.cipher.cifrarBytes(archivo.contenido));
@@ -308,6 +364,83 @@ export class ServicioDocumentos {
     });
     const lista = await this.listar(solicitudId);
     return lista.documentos.find((d) => d.id === documentoId);
+  }
+
+  // ---- cartas que genera el sistema con los datos del formulario
+
+  private async construirCarta(
+    solicitudId: number,
+    tipo: 'CARTA_SOLICITUD' | 'CARTA_CUIDADO',
+  ): Promise<{ carta: CartaGenerada; fecha: Date }> {
+    const datos = await documentosSolicitudRepo.datosCartas(this.deps.pool, solicitudId);
+    if (!datos) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
+    return {
+      carta: tipo === 'CARTA_SOLICITUD' ? cartaSolicitud(datos) : cartaCuidado(datos),
+      fecha: datos.fecha ?? new Date(0),
+    };
+  }
+
+  private async pdfDeCarta(solicitudId: number, tipo: 'CARTA_SOLICITUD' | 'CARTA_CUIDADO') {
+    const { carta, fecha } = await this.construirCarta(solicitudId, tipo);
+    return { carta, contenido: await renderCarta(carta, fecha) };
+  }
+
+  /** La carta tal como queda hoy con los datos escritos (para verla mientras se llena el formulario). */
+  async vistaPreviaCarta(solicitudId: number, documentoId: number) {
+    const documento = await documentosSolicitudRepo.exigidoPorId(this.deps.pool, documentoId);
+    if (!documento?.activo || !documento.generado) {
+      throw notFound('Ese documento no lo genera el sistema', 'DOCUMENTO_NO_GENERADO');
+    }
+    const { carta, contenido } = await this.pdfDeCarta(solicitudId, documento.generado);
+    return { nombre: carta.archivo, mime: MIME.pdf, contenido };
+  }
+
+  /**
+   * Genera y adjunta las cartas del sistema con los datos actuales. Si los datos no cambiaron, la carta vigente se
+   * conserva; si cambiaron, la anterior queda como «reemplazada».
+   */
+  async generarCartas(solicitudId: number, ctx: ContextoPeticion): Promise<void> {
+    const { pool } = this.deps;
+    const exigidos = (
+      await documentosSolicitudRepo.exigidos(pool, await this.requiereCuidador(solicitudId))
+    ).filter((d) => d.generado);
+    for (const d of exigidos) {
+      const { carta, contenido } = await this.pdfDeCarta(solicitudId, d.generado!);
+      const sha256 = createHash('sha256').update(contenido).digest('hex');
+      const vigente = await documentosSolicitudRepo.vigente(pool, solicitudId, d.id);
+      if (vigente?.sha256 === sha256) continue;
+      const ruta = this.almacen.nuevaClave(`solicitudes/${solicitudId}`);
+      await this.almacen.guardar(ruta, this.cipher.cifrarBytes(contenido));
+      await withTransaction(pool, async (tx) => {
+        const r = await documentosSolicitudRepo.reemplazar(tx, {
+          solicitudId,
+          documentoId: d.id,
+          nombreOriginal: carta.archivo,
+          formato: 'pdf',
+          mime: MIME.pdf,
+          tamanoBytes: contenido.length,
+          sha256,
+          ruta,
+          ip: ctx.ip,
+        });
+        await bitacoraRepo.registrar(tx, {
+          modulo: MODULO.DOCUMENTOS,
+          accion: ACCION.DOCUMENTO_CARGADO,
+          entidad: 'documento_solicitud',
+          entidadId: r.id,
+          solicitudId,
+          valorNuevo: {
+            documento: d.codigo,
+            archivo: carta.archivo,
+            formato: 'pdf',
+            tamanoBytes: contenido.length,
+            sha256,
+          },
+          detalle: { reemplazaA: r.reemplazaA, generadoPorElSistema: true },
+          ip: ctx.ip,
+        });
+      });
+    }
   }
 
   /** Entrega a la persona el archivo que cargó, descifrado y verificado contra su hash (RNF-06). */

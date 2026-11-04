@@ -74,6 +74,10 @@ export class ServicioRadicacion {
     const { pool, ahora } = this.deps;
     const dias = await parametrosRepo.entero(pool, 'enlace_seguro_dias');
     const seguro = randomBytes(32).toString('base64url');
+    // Las cartas se generan con los datos que escribió la persona, ya completos, y se adjuntan solas.
+    if ((await this.pendientes(solicitudId)).datos.length === 0) {
+      await this.documentos.generarCartas(solicitudId, ctx);
+    }
     const resultado = await withTransaction(pool, async (tx) => {
       if (!(await caracterizacionRepo.bloquear(tx, solicitudId))) {
         throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');

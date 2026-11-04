@@ -32,6 +32,7 @@ import { requisitosRepo } from '../infrastructure/repositories/requisitos.js';
 import { tokensRepo } from '../infrastructure/repositories/solicitudes.js';
 import {
   validacionRepo,
+  type Duplicidad,
   type FiltroBandeja,
   type ItemFila,
   type ItemSubsanacion,
@@ -72,6 +73,21 @@ export interface DatosItemEntrada {
  * con la lista de chequeo, decisión motivada y notificación del resultado. Un caso solo lo trabaja una persona a la
  * vez, y cada acción queda en la bitácora.
  */
+/** Texto de una duplicidad interna para el validador. */
+function mensajeDuplicidad(x: Duplicidad): string {
+  const otra = `${x.radicado ?? 'solicitud sin radicar'} (${ESTADOS[x.estado].nombre})`;
+  switch (x.tipo) {
+    case 'CUIDADOR_ES_PCD':
+      return `El cuidador también es persona con discapacidad y tiene su propia solicitud: ${otra}. Solo podrá recibir un beneficio (una sola tarjeta): confirme a cuál solicitud corresponde.`;
+    case 'PCD_ES_CUIDADOR':
+      return `La persona con discapacidad figura como cuidador en la solicitud ${otra}. Solo podrá recibir un beneficio (una sola tarjeta).`;
+    case 'CUIDADOR_COMPARTIDO':
+      return `El cuidador también está asociado a la solicitud ${otra}. Un cuidador puede acompañar a más de una persona, pero solo recibe un beneficio (una sola tarjeta).`;
+    default:
+      return `${x.persona === 'PCD' ? 'La persona con discapacidad' : 'El cuidador'} ya recibe un beneficio vigente en la solicitud ${otra}.`;
+  }
+}
+
 export class ServicioValidacion {
   private readonly cipher: DataCipher;
 
@@ -375,6 +391,10 @@ export class ServicioValidacion {
       })),
       items: items.map((i) => this.itemVista(i)),
       priorizacion: await this.vistaPriorizacion(pool, solicitudId),
+      duplicidades: (await validacionRepo.duplicidades(pool, solicitudId)).map((x) => ({
+        ...x,
+        mensaje: mensajeDuplicidad(x),
+      })),
       // RF-VAL-03: coincidencias de la persona y su cuidador en los archivos de cruce de la lista de chequeo.
       alertas: await this.cruces.alertas(
         pool,

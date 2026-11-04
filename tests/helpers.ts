@@ -140,3 +140,11 @@ export async function asignarAlToken(e: Entorno, solicitudId: number, token: str
     .set({ Authorization: `Bearer ${token}` });
   await asignarEnBd(e, solicitudId, yo.body.id as number);
 }
+
+/** PDF real con el número de hojas indicado (los documentos de varias hojas se validan contando sus páginas). */
+export async function pdfConHojas(n: number): Promise<Buffer> {
+  const { PDFDocument } = await import('pdf-lib');
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < n; i++) doc.addPage();
+  return Buffer.from(await doc.save());
+}

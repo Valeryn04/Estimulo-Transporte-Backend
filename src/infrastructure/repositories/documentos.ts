@@ -1,4 +1,5 @@
 import type { FormatoDocumento, FormatoModelo } from '../../domain/archivos.js';
+import type { DatosCarta } from '../../domain/cartas.js';
 import type { Queryable } from '../db/pool.js';
 
 export interface DocumentoExigido {
@@ -8,6 +9,10 @@ export interface DocumentoExigido {
   descripcion: string;
   aplicaA: 'PCD' | 'CUIDADOR' | 'COMUN';
   obligatorio: boolean;
+  /** Carta que genera el sistema con los datos del formulario (no se sube). */
+  generado: 'CARTA_SOLICITUD' | 'CARTA_CUIDADO' | null;
+  /** Hojas que debe tener el documento (por ejemplo, el certificado de discapacidad trae dos). */
+  hojasMinimas: number;
 }
 
 export interface ArchivoCargado {
@@ -72,8 +77,10 @@ export const documentosSolicitudRepo = {
       descripcion: string;
       aplica_a: DocumentoExigido['aplicaA'];
       obligatorio: boolean;
+      generado: DocumentoExigido['generado'];
+      hojas_minimas: number;
     }>(
-      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio
+      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, generado, hojas_minimas
          FROM documentos_requeridos
         WHERE activo AND (aplica_a <> 'CUIDADOR' OR $1::boolean)
         ORDER BY id`,
@@ -86,6 +93,8 @@ export const documentosSolicitudRepo = {
       descripcion: f.descripcion,
       aplicaA: f.aplica_a,
       obligatorio: f.obligatorio,
+      generado: f.generado,
+      hojasMinimas: f.hojas_minimas,
     }));
   },
 
@@ -101,8 +110,10 @@ export const documentosSolicitudRepo = {
       aplica_a: DocumentoExigido['aplicaA'];
       obligatorio: boolean;
       activo: boolean;
+      generado: DocumentoExigido['generado'];
+      hojas_minimas: number;
     }>(
-      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, activo
+      `SELECT id, codigo, nombre, descripcion, aplica_a, obligatorio, activo, generado, hojas_minimas
          FROM documentos_requeridos WHERE id = $1`,
       [id],
     );
@@ -116,8 +127,86 @@ export const documentosSolicitudRepo = {
           aplicaA: f.aplica_a,
           obligatorio: f.obligatorio,
           activo: f.activo,
+          generado: f.generado,
+          hojasMinimas: f.hojas_minimas,
         }
       : null;
+  },
+
+  /** Datos que llevan las cartas que genera el sistema: lo que la persona escribió en el formulario. */
+  async datosCartas(db: Queryable, solicitudId: number): Promise<DatosCarta | null> {
+    const r = await db.query<{
+      anio: number;
+      radicado: string | null;
+      direccion: string | null;
+      localidad: string | null;
+      barrio: string | null;
+      correo: string;
+      version: number | null;
+      aceptada_at: Date | null;
+      pcd_nombre: string;
+      pcd_tipo: string;
+      pcd_numero: string;
+      pcd_celular: string | null;
+      pcd_fijo: string | null;
+      cui_nombre: string | null;
+      cui_tipo: string | null;
+      cui_numero: string | null;
+      cui_celular: string | null;
+      cui_fijo: string | null;
+      cui_correo: string | null;
+      requiere_cuidador: boolean | null;
+    }>(
+      `SELECT v.anio, s.radicado, s.direccion, loc.nombre AS localidad, bar.nombre AS barrio, s.correo,
+              a.version, a.aceptada_at,
+              p.nombre_completo AS pcd_nombre, tp.nombre AS pcd_tipo, p.numero_identificacion AS pcd_numero,
+              c.pcd_celular, c.pcd_telefono_fijo AS pcd_fijo,
+              pc.nombre_completo AS cui_nombre, tc.nombre AS cui_tipo, pc.numero_identificacion AS cui_numero,
+              c.cuidador_celular AS cui_celular, c.cuidador_telefono_fijo AS cui_fijo, c.cuidador_correo AS cui_correo,
+              c.requiere_cuidador
+         FROM solicitudes s
+         JOIN vigencias v ON v.id = s.vigencia_id
+         JOIN personas p ON p.id = s.pcd_id
+         JOIN catalogo_items tp ON tp.id = p.tipo_identificacion_id
+         LEFT JOIN personas pc ON pc.id = s.cuidador_id
+         LEFT JOIN catalogo_items tc ON tc.id = pc.tipo_identificacion_id
+         LEFT JOIN caracterizaciones c ON c.solicitud_id = s.id
+         LEFT JOIN aceptaciones_autorizacion a ON a.solicitud_id = s.id
+         LEFT JOIN catalogo_items loc ON loc.id = s.localidad_id
+         LEFT JOIN catalogo_items bar ON bar.id = s.barrio_id
+        WHERE s.id = $1`,
+      [solicitudId],
+    );
+    const f = r.rows[0];
+    if (!f) return null;
+    return {
+      vigencia: f.anio,
+      fecha: f.aceptada_at,
+      autorizacionVersion: f.version,
+      radicado: f.radicado,
+      pcd: {
+        nombre: f.pcd_nombre,
+        tipo: f.pcd_tipo,
+        numero: f.pcd_numero,
+        celular: f.pcd_celular,
+        telefonoFijo: f.pcd_fijo,
+      },
+      cuidador:
+        f.cui_nombre && f.requiere_cuidador !== false
+          ? {
+              nombre: f.cui_nombre,
+              tipo: f.cui_tipo as string,
+              numero: f.cui_numero as string,
+              celular: f.cui_celular,
+              telefonoFijo: f.cui_fijo,
+              correo: f.cui_correo,
+            }
+          : null,
+      direccion: f.direccion,
+      barrio: f.barrio,
+      localidad: f.localidad,
+      correo: f.correo,
+    };
   },
 
   /** Archivo vigente (cargado) de cada documento de la solicitud, más el último rechazado si lo hay. */

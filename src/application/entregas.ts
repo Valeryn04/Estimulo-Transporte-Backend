@@ -7,8 +7,10 @@ import {
   rolesPendientes,
   type RolBeneficiario,
   type TipoReceptor,
+  errorFormatoTarjeta,
 } from '../domain/entrega.js';
 import { normalizarNumero } from '../domain/identificacion.js';
+import { renderActaEntrega, type FilaActa } from '../infrastructure/pdf/documentos.js';
 import { fijarActor } from '../infrastructure/db/actor.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
@@ -51,6 +53,56 @@ export class ServicioEntregas {
     private readonly correos: ServicioCorreos,
     private readonly documentos: ServicioDocumentos,
   ) {}
+
+  /** Cómo deben ser los identificadores de las tarjetas (parámetros: prefijo y cantidad de dígitos). */
+  private async formatoTarjeta(): Promise<{ prefijo: string; digitos: number }> {
+    const { pool } = this.deps;
+    return {
+      prefijo: (await parametrosRepo.texto(pool, 'tarjeta_prefijo')).trim().toUpperCase(),
+      digitos: await parametrosRepo.entero(pool, 'tarjeta_digitos'),
+    };
+  }
+
+  /**
+   * Planilla para firmar el día de la entrega, con una fila por persona que todavía no recibió su tarjeta en los
+   * beneficios elegidos. Después se fotografía o escanea y se adjunta al registrar cada entrega.
+   */
+  async actaDeEntrega(actor: Actor, beneficioIds: number[]) {
+    const { pool } = this.deps;
+    const filas: FilaActa[] = [];
+    for (const id of [...new Set(beneficioIds)]) {
+      const d = await this.detalle(id);
+      for (const rol of d.pendientes) {
+        const p = d.personas.find((x) => x.rol === rol);
+        if (!p) continue;
+        filas.push({
+          radicado: d.beneficio.radicado,
+          nombre: p.nombre,
+          documento: `${p.tipoIdentificacion} ${p.numero}`,
+          rol: rol === 'PCD' ? 'Persona con discapacidad' : 'Cuidador',
+        });
+      }
+    }
+    if (filas.length === 0) {
+      throw conflict(
+        'SIN_ENTREGAS_PENDIENTES',
+        'Ninguno de los beneficios elegidos tiene tarjetas pendientes de entregar.',
+      );
+    }
+    const hoy = (
+      await pool.query<{ iso: string; texto: string }>(
+        `SELECT to_char(hoy_bogota(), 'YYYY-MM-DD') AS iso, to_char(hoy_bogota(), 'DD/MM/YYYY') AS texto`,
+      )
+    ).rows[0]!;
+    const contenido = await renderActaEntrega({
+      fecha: hoy.texto,
+      lugar: (await parametrosRepo.texto(pool, 'entrega_lugar')).trim(),
+      funcionario: actor.nombres,
+      prefijoTarjeta: (await this.formatoTarjeta()).prefijo,
+      filas,
+    });
+    return { nombre: `acta-de-entrega-${hoy.iso}.pdf`, mime: 'application/pdf', contenido };
+  }
 
   async detalle(beneficioId: number) {
     const { pool } = this.deps;
@@ -103,10 +155,11 @@ export class ServicioEntregas {
         registradoAt: e.registradoAt.toISOString(),
       })),
       opciones,
-      // Lo que el formulario trae listo: el transporte que la persona dijo usar y cómo comienzan las tarjetas.
+      // Lo que el formulario trae listo: el transporte que la persona dijo usar y cómo son los identificadores.
       sugerencias: {
         tipoTransporteId: await entregasRepo.transporteDeLaSolicitud(pool, b.solicitudId),
-        prefijoTarjeta: (await parametrosRepo.texto(pool, 'tarjeta_prefijo')).trim(),
+        prefijoTarjeta: (await this.formatoTarjeta()).prefijo,
+        digitosTarjeta: (await this.formatoTarjeta()).digitos,
       },
     };
   }
@@ -128,12 +181,10 @@ export class ServicioEntregas {
         mensaje: 'Identificador de la tarjeta: use de 4 a 30 letras, números o guiones',
       });
     }
-    const prefijo = (await parametrosRepo.texto(pool, 'tarjeta_prefijo')).trim().toUpperCase();
-    if (prefijo && PATRON_TARJETA.test(tarjetaId) && !tarjetaId.startsWith(prefijo)) {
-      errores.push({
-        campo: 'tarjetaId',
-        mensaje: `Identificador de la tarjeta: debe comenzar por ${prefijo}`,
-      });
+    const formato = await this.formatoTarjeta();
+    if (PATRON_TARJETA.test(tarjetaId)) {
+      const error = errorFormatoTarjeta(tarjetaId, formato.prefijo, formato.digitos);
+      if (error) errores.push({ campo: 'tarjetaId', mensaje: error });
     }
     if (d.receptorTipo === 'TERCERO') {
       if (d.terceroConAutorizacion === undefined) {

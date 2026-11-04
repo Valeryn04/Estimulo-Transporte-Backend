@@ -94,7 +94,7 @@ export function crearServicios(deps: Dependencias): Servicios {
     radicacion: new ServicioRadicacion(deps, correos, documentos),
     validacion: new ServicioValidacion(deps, correos, documentos, cruces, priorizacion),
     requisitos: new ServicioRequisitos(deps),
-    subsanacion: new ServicioSubsanacion(deps, correos),
+    subsanacion: new ServicioSubsanacion(deps, correos, documentos),
     cruces,
     matriz: new ServicioMatriz(deps, priorizacion),
     priorizacion,

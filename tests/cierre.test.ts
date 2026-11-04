@@ -286,7 +286,7 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       const tomada = await request(e.app).post(`${v}/casos/${s.solicitudId}/tomar`).set(h).send();
       const items = tomada.body.items as { id: number; codigo: string }[];
       for (const i of items) {
-        const nc = i.codigo === 'PCD_SISBEN';
+        const nc = i.codigo === 'PCD_CERTIFICADO_DISCAPACIDAD';
         const m = await request(e.app)
           .put(`${v}/casos/${s.solicitudId}/items/${i.id}`)
           .set(h)
@@ -301,7 +301,10 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       const d = await request(e.app)
         .post(`${v}/casos/${s.solicitudId}/decision`)
         .set(h)
-        .send({ decision: 'SUBSANAR', motivacion: 'El soporte del SISBÉN no está vigente.' });
+        .send({
+          decision: 'SUBSANAR',
+          motivacion: 'El certificado de discapacidad no está vigente.',
+        });
       expect(d.status, JSON.stringify(d.body)).toBe(201);
       await e.servicios.correos.esperarDespachos();
       return s;
@@ -328,7 +331,7 @@ describe('cierre de requisitos de las entregas 2 y 3', () => {
       await e.servicios.correos.esperarDespachos();
       const correo = e.mailer.enviados.find((m) => m.subject.includes('Recordatorio'));
       expect(correo?.to).toBe('plazo@correo.com');
-      expect(correo?.text).toContain('SISBÉN');
+      expect(correo?.text).toContain('Certificado de discapacidad vigente');
       expect(correo?.text).toMatch(/caracterizacion\?token=/);
       expect(await e.servicios.subsanacion.revisarPlazos()).toEqual({
         recordatorios: 0,

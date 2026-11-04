@@ -207,6 +207,17 @@ export function rutasAsignacion(s: Servicios): Router {
 
   // ---- entrega y activación (RF-ASI-05, RF-ASI-06)
 
+  /** Planilla de entrega para firmar el día de la entrega: `?beneficios=1,2,3`. */
+  r.get('/actas-entrega', ver, async (req, res) => {
+    const ids = z
+      .string({ error: 'Beneficios: indique cuáles' })
+      .regex(/^\d+(,\d+){0,99}$/, 'Beneficios: indique los números separados por comas')
+      .parse(req.query.beneficios)
+      .split(',')
+      .map(Number);
+    enviarArchivo(res, await s.entregas.actaDeEntrega(req.actor!, ids));
+  });
+
   r.get('/beneficiarios/:id', ver, async (req, res) => {
     res.json(await s.entregas.detalle(idParam(req)));
   });

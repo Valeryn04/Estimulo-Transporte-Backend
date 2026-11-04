@@ -13,6 +13,7 @@ import { textoItemsSubsanar } from '../domain/validacion.js';
 import { conflict, notFound } from '../shared/errors.js';
 import type { ContextoPeticion, Dependencias } from './contexto.js';
 import type { ServicioCorreos } from './correos.js';
+import type { ServicioDocumentos } from './documentos.js';
 import { errorValidacion } from './esquemas.js';
 
 /** Qué puede modificar la persona en su solicitud según su estado (RF-CAR-06). */
@@ -90,6 +91,7 @@ export class ServicioSubsanacion {
   constructor(
     private readonly deps: Dependencias,
     private readonly correos: ServicioCorreos,
+    private readonly documentos: ServicioDocumentos,
   ) {}
 
   /**
@@ -245,6 +247,8 @@ export class ServicioSubsanacion {
     const { pool, ahora } = this.deps;
     const dias = await parametrosRepo.entero(pool, 'enlace_seguro_dias');
     const token = randomBytes(32).toString('base64url');
+    // Si la persona corrigió datos, las cartas del sistema se vuelven a generar con lo nuevo.
+    await this.documentos.generarCartas(solicitudId, ctx);
     await withTransaction(pool, async (tx) => {
       if (!(await caracterizacionRepo.bloquear(tx, solicitudId))) {
         throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');

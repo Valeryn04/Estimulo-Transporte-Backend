@@ -7,6 +7,7 @@ import {
   crearEntorno,
   type CuentaPrueba,
   type Entorno,
+  pdfConHojas,
 } from './helpers.js';
 import { ayudantesSolicitud, bearer, pdf } from './solicitudes.js';
 
@@ -341,7 +342,11 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const sin = await tomar(validador, s.solicitudId);
       expect(sin.items.some((i) => i.codigo.startsWith('CUI_'))).toBe(false);
       expect(sin.items.map((i) => i.codigo)).toEqual(
-        expect.arrayContaining(['PCD_IDENTIDAD', 'PCD_SISBEN', 'COM_CARTA_SOLICITUD']),
+        expect.arrayContaining([
+          'PCD_IDENTIDAD',
+          'PCD_CERTIFICADO_DISCAPACIDAD',
+          'COM_CARTA_SOLICITUD',
+        ]),
       );
       expect(sin.items.every((i) => i.resultado === 'PENDIENTE')).toBe(true);
       const con = await ay.solicitudRadicada({ cuidador: true });
@@ -350,7 +355,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const item = sin.items[0]!;
       await marcar(validador, s.solicitudId, item, 'CUMPLE', {
         observacion: 'Todo bien',
-        evidencia: 'Captura SISBÉN',
+        evidencia: 'Captura del certificado',
       });
       await marcar(validador, s.solicitudId, item, 'NO_CUMPLE', { observacion: 'Ilegible' });
       const actual = (await caso(validador, s.solicitudId)).items.find((i) => i.id === item.id)!;
@@ -506,16 +511,16 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
     ) {
       const c = await tomar(validadorCuenta, s.solicitudId);
       for (const i of c.items) await marcar(validadorCuenta, s.solicitudId, i, 'CUMPLE');
-      const sisben = c.items.find((i) => i.codigo === 'PCD_SISBEN')!;
-      await marcar(validadorCuenta, s.solicitudId, sisben, 'NO_CUMPLE', {
+      const certificado = c.items.find((i) => i.codigo === 'PCD_CERTIFICADO_DISCAPACIDAD')!;
+      await marcar(validadorCuenta, s.solicitudId, certificado, 'NO_CUMPLE', {
         observacion: 'El soporte es de otro mes; cargue el vigente.',
       });
       const r = await post(validadorCuenta, `/casos/${s.solicitudId}/decision`, {
         decision: 'SUBSANAR',
-        motivacion: 'El soporte del SISBÉN no está vigente.',
+        motivacion: 'El certificado de discapacidad no está vigente.',
       });
       expect(r.status, JSON.stringify(r.body)).toBe(201);
-      return { sisben, respuesta: r.body };
+      return { certificado, respuesta: r.body };
     }
 
     it('pide corregir solo lo señalado, con observación y plazo, y se lo avisa a la persona por correo', async () => {
@@ -526,7 +531,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       expect(await estadoDe(s.solicitudId)).toBe('EN_SUBSANACION');
       const correo = await ultimoCorreo();
       expect(correo.to).toBe('subsana@correo.com');
-      expect(correo.text).toContain('SISBÉN IV grupo A, B o C');
+      expect(correo.text).toContain('Certificado de discapacidad vigente');
       expect(correo.text).toContain('El soporte es de otro mes; cargue el vigente.');
       expect(correo.text).toMatch(/Tiene plazo hasta el \d{2}\/\d{2}\/\d{4}/);
       expect(correo.text).toMatch(/caracterizacion\?token=/);
@@ -547,11 +552,11 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
 
     it('la persona solo puede modificar los documentos y datos señalados', async () => {
       const s = await ay.solicitudRadicada();
-      const { sisben } = await pedirSubsanacion(s);
+      const { certificado } = await pedirSubsanacion(s);
       const docs = await ay.lista(s.token);
       expect(docs.editable).toBe(true);
-      expect(docs.documentosEditables).toEqual([sisben.documentoId]);
-      const otro = docs.documentos.find((d) => d.id !== sisben.documentoId)!;
+      expect(docs.documentosEditables).toEqual([certificado.documentoId]);
+      const otro = docs.documentos.find((d) => d.id !== certificado.documentoId)!;
       const prohibido = await ay.subir(s.token, otro.id, pdf('otro'), 'otro.pdf');
       expect(prohibido.status).toBe(409);
       expect(prohibido.body.error.codigo).toBe('DOCUMENTO_NO_SENALADO');
@@ -568,13 +573,18 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
         'Solo puede modificar lo que se le pidió corregir',
       );
       // Sí puede reemplazar el documento señalado.
-      const ok = await ay.subir(s.token, sisben.documentoId!, pdf('nuevo sisben'), 'sisben.pdf');
+      const ok = await ay.subir(
+        s.token,
+        certificado.documentoId!,
+        await pdfConHojas(2),
+        'certificado.pdf',
+      );
       expect(ok.status).toBe(201);
     });
 
     it('al responder el caso vuelve a la bandeja como «subsanado» y se revisa sobre la misma lista de chequeo', async () => {
       const s = await ay.solicitudRadicada({ correo: 'vuelve@correo.com' });
-      const { sisben } = await pedirSubsanacion(s);
+      const { certificado } = await pedirSubsanacion(s);
       const responder = () =>
         request(e.app)
           .post(`${pub}/caracterizacion/subsanacion/responder`)
@@ -584,7 +594,12 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const antes = await responder();
       expect(antes.status).toBe(422);
       expect(JSON.stringify(antes.body)).toContain('Cargue el documento corregido');
-      await ay.subir(s.token, sisben.documentoId!, pdf('vigente'), 'sisben-vigente.pdf');
+      await ay.subir(
+        s.token,
+        certificado.documentoId!,
+        await pdfConHojas(2),
+        'certificado-vigente.pdf',
+      );
       e.mailer.enviados.length = 0;
       const ok = await responder();
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
@@ -594,23 +609,23 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       expect(correo.to).toBe('vuelve@correo.com');
       expect(correo.text).toContain('Recibimos las correcciones');
       // Ya no admite más cambios ni una segunda respuesta.
-      expect((await ay.subir(s.token, sisben.documentoId!, pdf('otra vez'), 'x.pdf')).status).toBe(
-        409,
-      );
+      expect(
+        (await ay.subir(s.token, certificado.documentoId!, pdf('otra vez'), 'x.pdf')).status,
+      ).toBe(409);
       expect((await responder()).status).toBe(409);
       // Aparece en la bandeja marcado como subsanado y con el historial de documentos conservado.
       const fila = (await get(validador, `/bandeja?q=${s.radicado}`)).body.items[0];
       expect(fila).toMatchObject({ estado: { codigo: 'SUBSANADA' }, subsanado: true, ronda: 2 });
       const versiones = await e.pool.query(
         `SELECT estado FROM documentos_solicitud WHERE solicitud_id = $1 AND documento_id = $2 ORDER BY id`,
-        [s.solicitudId, sisben.documentoId],
+        [s.solicitudId, certificado.documentoId],
       );
       expect(versiones.rows.map((x) => x.estado)).toEqual(['REEMPLAZADO', 'CARGADO']);
       // El validador retoma la misma lista: lo que cumplía sigue cumpliendo; el requisito corregido se revisa de nuevo.
       const c = await tomar(validador, s.solicitudId);
       expect(c.items.filter((i) => i.resultado === 'CUMPLE')).toHaveLength(c.items.length - 1);
-      expect(c.items.find((i) => i.id === sisben.id)!.resultado).toBe('NO_CUMPLE');
-      await marcar(validador, s.solicitudId, sisben, 'CUMPLE');
+      expect(c.items.find((i) => i.id === certificado.id)!.resultado).toBe('NO_CUMPLE');
+      await marcar(validador, s.solicitudId, certificado, 'CUMPLE');
       await capturarVariables(validador, s.solicitudId);
       const aprobada = await post(validador, `/casos/${s.solicitudId}/decision`, {
         decision: 'APROBAR',
@@ -688,7 +703,7 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
 
     it('si el plazo vence sin respuesta, el caso queda para decisión del validador, que puede rechazar por falta de respuesta', async () => {
       const s = await ay.solicitudRadicada({ correo: 'vencida@correo.com' });
-      const { sisben } = await pedirSubsanacion(s);
+      const { certificado } = await pedirSubsanacion(s);
       await e.pool.query(
         `UPDATE subsanaciones SET vence_at = now() - interval '1 hour' WHERE solicitud_id = $1`,
         [s.solicitudId],
@@ -698,9 +713,9 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
         await request(e.app).get(`${pub}/caracterizacion/subsanacion`).set(bearer(s.token))
       ).body.subsanacion;
       expect(sub).toMatchObject({ estado: 'VENCIDA', puedeResponder: false });
-      expect((await ay.subir(s.token, sisben.documentoId!, pdf('tarde'), 'tarde.pdf')).status).toBe(
-        409,
-      );
+      expect(
+        (await ay.subir(s.token, certificado.documentoId!, pdf('tarde'), 'tarde.pdf')).status,
+      ).toBe(409);
       expect(
         (
           await request(e.app)
@@ -741,7 +756,9 @@ describe('validación de requisitos (RF-VAL-01, RF-VAL-02, RF-VAL-05) y subsanac
       const r = await adminGet(administrador, '/requisitos');
       expect(r.status).toBe(200);
       expect(r.body.items.length).toBeGreaterThanOrEqual(13);
-      expect(r.body.items.map((x: { codigo: string }) => x.codigo)).toContain('PCD_SISBEN');
+      expect(r.body.items.map((x: { codigo: string }) => x.codigo)).toContain(
+        'PCD_CERTIFICADO_DISCAPACIDAD',
+      );
     });
 
     it('un requisito nuevo se pide solo a los casos que empiezan después; los que ya empezaron conservan su lista', async () => {

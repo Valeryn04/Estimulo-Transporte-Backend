@@ -109,9 +109,8 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
   let casoE: Caso;
 
   /** Todas las variables de priorización en «No», salvo las indicadas. */
-  const valores = (dep: string, grupo: string, extra: Record<string, string> = {}) => ({
+  const valores = (dep: string, extra: Record<string, string> = {}) => ({
     DEPENDENCIA_FUNCIONAL: dep,
-    GRUPO_SISBEN: grupo,
     ENFERMEDAD_CRONICA: 'NO',
     POBREZA_DESPLAZAMIENTO: 'NO',
     HOGAR_VULNERABLE: 'NO',
@@ -128,10 +127,10 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
     responsable = await crearCuenta(e, 'RESPONSABLE_PROCESO');
     analista = await crearCuenta(e, 'ANALISTA');
     control = await crearCuenta(e, 'CONTROL_INTERNO');
-    // 90, 50, 35, 18 y 18 puntos (todas con cuidador).
+    // 70, 30, 20, 10 y 10 puntos (todas con cuidador).
     casoA = await ay.validada(
       validador,
-      valores('SEVERA', 'GRUPO_A', {
+      valores('SEVERA', {
         ENFERMEDAD_CRONICA: 'SI',
         POBREZA_DESPLAZAMIENTO: 'SI',
         HOGAR_VULNERABLE: 'SI',
@@ -139,16 +138,16 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       }),
       { correo: 'caso.a@correo.com' },
     );
-    casoB = await ay.validada(validador, valores('SEVERA', 'GRUPO_A'), {
+    casoB = await ay.validada(validador, valores('SEVERA'), {
       correo: 'caso.b@correo.com',
     });
-    casoC = await ay.validada(validador, valores('MODERADA', 'GRUPO_B'), {
+    casoC = await ay.validada(validador, valores('MODERADA'), {
       correo: 'caso.c@correo.com',
     });
-    casoD = await ay.validada(validador, valores('LEVE', 'GRUPO_C'), {
+    casoD = await ay.validada(validador, valores('LEVE'), {
       correo: 'caso.d@correo.com',
     });
-    casoE = await ay.validada(validador, valores('LEVE', 'GRUPO_C'), {
+    casoE = await ay.validada(validador, valores('LEVE'), {
       correo: 'caso.e@correo.com',
     });
   });
@@ -414,7 +413,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         motivo: 'SIN_PRESUPUESTO',
         motivoTexto: 'No alcanza el presupuesto disponible',
       });
-      expect(p.items[0]).toMatchObject({ puntajeFinal: 90, posicion: 1 });
+      expect(p.items[0]).toMatchObject({ puntajeFinal: 70, posicion: 1 });
     });
 
     it('saltarse un caso que va antes en el orden exige registrar la causa', async () => {
@@ -442,7 +441,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         `SELECT causa, posicion, puntaje_final FROM asignacion_omisiones WHERE solicitud_id = $1`,
         [casoA.solicitudId],
       );
-      expect(om.rows).toEqual([{ causa, posicion: 1, puntaje_final: '90.00' }]);
+      expect(om.rows).toEqual([{ causa, posicion: 1, puntaje_final: '70.00' }]);
       const bit = await e.pool.query(
         `SELECT usuario_id, justificacion FROM bitacora WHERE accion = 'ASIGNACION_OMITIDA' AND solicitud_id = $1`,
         [casoA.solicitudId],
@@ -456,7 +455,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         personas: 2,
         valorComprometido: 1_000_000,
         posicion: 2,
-        puntajeFinal: 50,
+        puntajeFinal: 30,
         asignadoPor: asignador.usuario,
         reemplazaRadicado: null,
       });

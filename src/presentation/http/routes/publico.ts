@@ -471,6 +471,21 @@ export function rutasPublicas(
     },
   );
 
+  /** La carta que genera el sistema con los datos escritos, para verla mientras se llena el formulario. */
+  r.get(
+    '/caracterizacion/documentos/:documentoId/carta',
+    autenticarCiudadano(tokens),
+    async (req, res) => {
+      enviarArchivo(
+        res,
+        await s.documentos.vistaPreviaCarta(
+          req.solicitudId as number,
+          documentoParam(req.params.documentoId),
+        ),
+      );
+    },
+  );
+
   /** Lo que se le pidió corregir al ciudadano (observación del validador y plazo), si hay una subsanación. */
   r.get('/caracterizacion/subsanacion', autenticarCiudadano(tokens), async (req, res) => {
     res.json({ subsanacion: await s.subsanacion.obtener(req.solicitudId as number) });

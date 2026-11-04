@@ -32,8 +32,9 @@ deps.ahora = () => reloj.ahora;
 const api = '/api/v1';
 const adm = `${api}/admin`;
 const pub = `${api}/publico`;
-const pdf = (relleno = 'contenido') =>
-  Buffer.from(`%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n% ${relleno}\n%%EOF\n`);
+// Un PDF de dos hojas sirve para todo, también para el certificado de discapacidad, que exige dos.
+let pdfDosHojas = Buffer.alloc(0);
+const pdf = (_relleno = 'contenido') => pdfDosHojas;
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
 const tokenDe = (texto: string) => /token=([A-Za-z0-9_-]+)/.exec(texto)![1]!;
 const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
@@ -46,6 +47,13 @@ function exigir(r: request.Response, que: string): request.Response {
 }
 
 async function main() {
+  {
+    const { PDFDocument } = await import('pdf-lib');
+    const d = await PDFDocument.create();
+    d.addPage();
+    d.addPage();
+    pdfDosHojas = Buffer.from(await d.save());
+  }
   // ------------------------------------------------------------------ 1. Base de datos vacía y cuentas
   const previo = (
     await pool
@@ -161,13 +169,6 @@ async function main() {
   const barrios = f0.barrios as { id: number; localidadId: number }[];
   let consecutivo = 1_002_000_000;
 
-  interface Persona {
-    solicitudId: number;
-    correo: string;
-    token: string;
-    radicado?: string;
-  }
-
   async function preinscribir(
     nombre: string,
     cuidador: string | null,
@@ -257,8 +258,9 @@ async function main() {
       'caracterización',
     );
     const docs = (await request(app).get(`${pub}/caracterizacion/documentos`).set(bearer(tk))).body
-      .documentos as { id: number; codigo: string; obligatorio: boolean }[];
-    for (const d of docs.filter((x) => x.obligatorio)) {
+      .documentos as { id: number; codigo: string; obligatorio: boolean; generado: boolean }[];
+    // Las cartas las genera el sistema solas al radicar.
+    for (const d of docs.filter((x) => x.obligatorio && !x.generado)) {
       exigir(
         await request(app)
           .post(`${pub}/caracterizacion/documentos/${d.id}`)
@@ -453,7 +455,7 @@ async function main() {
       exigir(
         await multipart('asignador', `/asignacion/beneficiarios/${beneficioId}/entregas`, {
           rol,
-          tarjetaId: `ESTBQ-${String(100 + n * 2 + (rol === 'PCD' ? 0 : 1)).padStart(6, '0')}`,
+          tarjetaId: `MFPLUS-EV-${String(10_000 + n * 2 + (rol === 'PCD' ? 0 : 1)).padStart(8, '0')}`,
           tipoTransporteId: transporte,
           fechaEntrega: hoy(),
           receptorTipo: rol,
