@@ -188,6 +188,7 @@ describe('respuesta simulada del servicio (pruebas y muestras)', () => {
       BDUA_URL: 'https://servicio.test/x',
       BDUA_TOKEN: 't',
       BDUA_SIMULAR: 'true',
+      BDUA_SIMULAR_NO_SUBSIDIADOS: '',
     };
     expect(crearConsultaRegimen({ url: 'u', token: 't' }, { noSubsidiados: [] })).toBeInstanceOf(
       RegimenSimuladoReal,

@@ -24,6 +24,7 @@
     "demo:datos": "tsx scripts/datos-demo.ts",
     "muestra": "tsx scripts/muestra.ts",
     "respaldo": "tsx scripts/respaldo.ts",
+    "limpiar": "tsx scripts/limpiar.ts",
     "restaurar": "tsx scripts/restaurar.ts",
     "verificar:documentos": "tsx scripts/verificar-documentos.ts",
     "prueba:carga": "tsx scripts/prueba-carga.ts"
