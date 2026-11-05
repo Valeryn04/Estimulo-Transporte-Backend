@@ -65,7 +65,7 @@ export function crearDependencias(env: Env): Dependencias {
     mailer: new SmtpMailer({ ...env.smtp, from: env.mailFrom }),
     tokens: new TokenService(env.jwtSecret),
     turnstile: crearTurnstile(env.turnstile),
-    regimen: crearConsultaRegimen(env.bdua),
+    regimen: crearConsultaRegimen(env.bdua, env.bduaSimulado),
     ahora: () => new Date(),
   };
 }

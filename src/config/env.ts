@@ -39,6 +39,10 @@ const schema = z.object({
   // Consulta automática del régimen de salud (BDUA/ADRES). Sin ambas variables la persona carga el soporte a mano.
   BDUA_URL: z.string().default(''),
   BDUA_TOKEN: z.string().default(''),
+  // Solo para pruebas y muestras: responde «subsidiado» sin llamar al servicio. No se permite en producción.
+  BDUA_SIMULAR: z.enum(['true', 'false']).optional(),
+  // Números de documento que la simulación responde como NO subsidiados (separados por comas).
+  BDUA_SIMULAR_NO_SUBSIDIADOS: z.string().default(''),
 });
 
 export interface EncryptionKeys {
@@ -78,6 +82,8 @@ export interface Env {
   turnstile: { siteKey: string; secret: string } | null;
   /** Servicio de consulta del régimen de salud; null = desactivado. */
   bdua: { url: string; token: string } | null;
+  /** Respuesta simulada del servicio (solo fuera de producción); null = se usa el servicio real. */
+  bduaSimulado: { noSubsidiados: string[] } | null;
 }
 
 /** Interpreta "v1:base64,v2:base64": la primera llave es la activa. */
@@ -110,6 +116,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const e = parsed.data;
   const frontendOrigenes = e.FRONTEND_URL.split(',').map((u) => u.trim().replace(/\/$/, ''));
   const cookieSecure = e.COOKIE_SECURE ? e.COOKIE_SECURE === 'true' : e.NODE_ENV === 'production';
+  if (e.NODE_ENV === 'production' && e.BDUA_SIMULAR === 'true') {
+    throw new Error(
+      'BDUA_SIMULAR no puede estar activo en producción: la consulta del régimen debe ser la real',
+    );
+  }
   if (e.NODE_ENV === 'production' && !cookieSecure) {
     throw new Error(
       'COOKIE_SECURE no puede ser false en producción: la sesión debe viajar por HTTPS',
@@ -121,6 +132,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         ? { siteKey: e.TURNSTILE_SITE_KEY, secret: e.TURNSTILE_SECRET }
         : null,
     bdua: e.BDUA_URL && e.BDUA_TOKEN ? { url: e.BDUA_URL, token: e.BDUA_TOKEN } : null,
+    bduaSimulado:
+      e.BDUA_SIMULAR === 'true'
+        ? {
+            noSubsidiados: e.BDUA_SIMULAR_NO_SUBSIDIADOS.split(',')
+              .map((x) => x.trim())
+              .filter(Boolean),
+          }
+        : null,
     apiDocs: e.API_DOCS ? e.API_DOCS === 'true' : e.NODE_ENV !== 'production',
     cookieSecure,
     nodeEnv: e.NODE_ENV,

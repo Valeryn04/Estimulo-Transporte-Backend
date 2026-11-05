@@ -1,7 +1,10 @@
 import request from 'supertest';
+import { loadEnv } from '../src/config/env.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   RegimenHttp,
+  RegimenSimulado as RegimenSimuladoReal,
+  crearConsultaRegimen,
   type ConsultaRegimen,
   type ResultadoRegimen,
 } from '../src/infrastructure/bdua/regimen.js';
@@ -166,5 +169,30 @@ describe('filtro de régimen subsidiado en la caracterización', () => {
       [p.solicitudId],
     );
     expect(consultas.rows.map((x) => x.resultado)).toEqual(['NO_DISPONIBLE', 'SUBSIDIADO']);
+  });
+});
+
+describe('respuesta simulada del servicio (pruebas y muestras)', () => {
+  it('responde subsidiado, salvo los documentos que se indiquen, y lo marca como simulado', async () => {
+    const c = crearConsultaRegimen(null, { noSubsidiados: ['111'] });
+    expect(await c.consultar('CC', '222')).toEqual({
+      estado: 'SUBSIDIADO',
+      mensaje: '(simulado) La persona se encuentra en estado AC',
+    });
+    expect((await c.consultar('CC', '111')).estado).toBe('NO_SUBSIDIADO');
+  });
+
+  it('la simulación tiene prioridad sobre el servicio real, y no se permite en producción', () => {
+    const base = {
+      NODE_ENV: 'test',
+      BDUA_URL: 'https://servicio.test/x',
+      BDUA_TOKEN: 't',
+      BDUA_SIMULAR: 'true',
+    };
+    expect(crearConsultaRegimen({ url: 'u', token: 't' }, { noSubsidiados: [] })).toBeInstanceOf(
+      RegimenSimuladoReal,
+    );
+    expect(() => loadEnv({ ...process.env, ...base, NODE_ENV: 'production' })).toThrow();
+    expect(loadEnv({ ...process.env, ...base }).bduaSimulado).toEqual({ noSubsidiados: [] });
   });
 });

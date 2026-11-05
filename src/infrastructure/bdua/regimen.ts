@@ -26,6 +26,21 @@ export class RegimenDesactivado implements ConsultaRegimen {
   }
 }
 
+/**
+ * Respuesta simulada para pruebas y muestras cuando el servicio real no está disponible. Toda persona resulta
+ * subsidiada, salvo los números indicados. Nunca se usa en producción (la configuración lo impide).
+ */
+export class RegimenSimulado implements ConsultaRegimen {
+  readonly activo = true;
+  constructor(private readonly noSubsidiados: readonly string[] = []) {}
+
+  async consultar(_tipoDocumento: string, numero: string): Promise<ResultadoRegimen> {
+    return this.noSubsidiados.includes(numero)
+      ? { estado: 'NO_SUBSIDIADO', mensaje: '(simulado) La persona no se encuentra en estado AC' }
+      : { estado: 'SUBSIDIADO', mensaje: '(simulado) La persona se encuentra en estado AC' };
+  }
+}
+
 export class RegimenHttp implements ConsultaRegimen {
   readonly activo = true;
   constructor(
@@ -71,6 +86,8 @@ export class RegimenHttp implements ConsultaRegimen {
 
 export function crearConsultaRegimen(
   config: { url: string; token: string } | null,
+  simulado: { noSubsidiados: string[] } | null = null,
 ): ConsultaRegimen {
+  if (simulado) return new RegimenSimulado(simulado.noSubsidiados);
   return config ? new RegimenHttp(config.url, config.token) : new RegimenDesactivado();
 }
