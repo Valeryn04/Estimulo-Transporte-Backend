@@ -78,7 +78,7 @@ export class ServicioRadicacion {
     const dias = await parametrosRepo.entero(pool, 'enlace_seguro_dias');
     const seguro = randomBytes(32).toString('base64url');
     // Filtro: se vuelve a consultar el régimen de salud antes de enviar.
-    if (this.deps.regimen.activo) await this.documentos.consultarRegimen(solicitudId, ctx, true);
+    await this.documentos.consultarRegimen(solicitudId, ctx, true);
     // Las cartas se generan con los datos que escribió la persona, ya completos, y se adjuntan solas.
     if ((await this.pendientes(solicitudId)).datos.length === 0) {
       await this.documentos.generarCartas(solicitudId, ctx);

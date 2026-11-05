@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import request from 'supertest';
-import { RegimenDesactivado } from '../src/infrastructure/bdua/regimen.js';
+import type { ConsultaRegimen } from '../src/infrastructure/bdua/regimen.js';
 import { TurnstileDesactivado } from '../src/infrastructure/security/turnstile.js';
 import { loadEnv } from '../src/config/env.js';
 import type { Dependencias } from '../src/application/contexto.js';
@@ -45,7 +45,7 @@ export async function crearEntorno(opciones: { ips?: string[] } = {}): Promise<E
     mailer,
     tokens: new TokenService(env.jwtSecret),
     turnstile: new TurnstileDesactivado(),
-    regimen: new RegimenDesactivado(),
+    regimen: new RegimenSimulado(),
     ahora: () => reloj.ahora,
   };
   const { app, servicios } = crearAplicacion(deps, { limitarIntentos: false });
@@ -144,6 +144,17 @@ export async function asignarAlToken(e: Entorno, solicitudId: number, token: str
 }
 
 /** PDF real con el número de hojas indicado (los documentos de varias hojas se validan contando sus páginas). */
+/** Servicio de régimen de salud simulado: toda persona resulta afiliada y activa en el régimen subsidiado. */
+export class RegimenSimulado implements ConsultaRegimen {
+  readonly activo = true;
+  consultar() {
+    return Promise.resolve({
+      estado: 'SUBSIDIADO' as const,
+      mensaje: 'La persona se encuentra en estado AC',
+    });
+  }
+}
+
 export async function pdfConHojas(n: number): Promise<Buffer> {
   const { PDFDocument } = await import('pdf-lib');
   const doc = await PDFDocument.create();

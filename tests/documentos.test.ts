@@ -27,6 +27,7 @@ interface Doc {
   aplicaA: string;
   obligatorio: boolean;
   generado: boolean;
+  automatico?: boolean;
   hojasMinimas: number;
   estado: string;
   reemplazos: number;
@@ -156,7 +157,9 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
   };
   /** Carga todos los documentos obligatorios que le corresponden. */
   const cargarTodos = async (t: string) => {
-    for (const d of (await lista(t)).documentos.filter((x) => x.obligatorio && !x.generado)) {
+    for (const d of (await lista(t)).documentos.filter(
+      (x) => x.obligatorio && !x.generado && !x.automatico,
+    )) {
       const contenido = d.hojasMinimas > 1 ? await pdfConHojas(d.hojasMinimas) : pdf(d.codigo);
       expect((await subir(t, d.id, contenido, `${d.codigo}.pdf`)).status).toBe(201);
     }
@@ -204,7 +207,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('un documento desactivado deja de pedirse', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       await e.pool.query(`UPDATE documentos_requeridos SET activo = false WHERE id = $1`, [id]);
       expect((await lista(p.token)).documentos.map((d) => d.id)).not.toContain(id);
       expect((await subir(p.token, id, pdf(), 'afiliacion.pdf')).status).toBe(404);
@@ -218,7 +221,9 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       await caracterizar(p.token, true);
       // Los documentos de una hoja que se suben a mano (las cartas las genera el sistema).
       const l = await lista(p.token);
-      const [a, b, c] = l.documentos.filter((d) => !d.generado && d.hojasMinimas === 1);
+      const [a, b, c] = l.documentos.filter(
+        (d) => !d.generado && !d.automatico && d.hojasMinimas === 1,
+      );
       const archivos = [
         { d: a!, contenido: pdf(), nombre: 'identidad.pdf', formato: 'pdf' },
         { d: b!, contenido: jpg(), nombre: 'FOTO.JPEG', formato: 'jpg' },
@@ -251,7 +256,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       const p = await persona();
       const r = await subir(
         p.token,
-        await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO'),
+        await idDoc(p.token, 'PCD_SISBEN'),
         pdf(),
         'Cédula de Ñandú.pdf',
       );
@@ -262,12 +267,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
     it('rechaza un archivo que pesa más del máximo con el tamaño y el límite en el mensaje', async () => {
       const p = await persona();
       const grande = Buffer.concat([pdf(), Buffer.alloc(5 * 1_048_576 + 10)]);
-      const r = await subir(
-        p.token,
-        await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO'),
-        grande,
-        'grande.pdf',
-      );
+      const r = await subir(p.token, await idDoc(p.token, 'PCD_SISBEN'), grande, 'grande.pdf');
       expect(r.status).toBe(422);
       expect(r.body.error.errores[0]).toMatchObject({ campo: 'archivo' });
       expect(r.body.error.errores[0].mensaje).toMatch(/pesa 5,0 MB|pesa 5,\d MB/);
@@ -276,7 +276,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('rechaza lo que no es PDF, JPG o PNG aunque el nombre lo diga (se revisa el contenido)', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       const falso = await subir(
         p.token,
         id,
@@ -294,19 +294,14 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('rechaza un archivo cuya extensión no corresponde a su contenido', async () => {
       const p = await persona();
-      const r = await subir(
-        p.token,
-        await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO'),
-        png(),
-        'foto.pdf',
-      );
+      const r = await subir(p.token, await idDoc(p.token, 'PCD_SISBEN'), png(), 'foto.pdf');
       expect(r.status).toBe(422);
       expect(r.body.error.errores[0].mensaje).toContain('no corresponde a su extensión');
     });
 
     it('rechaza un archivo vacío y una petición sin archivo', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       expect((await subir(p.token, id, Buffer.alloc(0), 'vacio.pdf')).status).toBe(422);
       const sin = await request(e.app)
         .post(`${pub}/caracterizacion/documentos/${id}`)
@@ -317,7 +312,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('respeta los parámetros: un formato que la Gerencia deja de permitir se rechaza', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       await e.pool.query(
         `INSERT INTO parametro_versiones (clave, valor, justificacion) VALUES ('archivo_formatos', 'pdf', 'prueba')`,
       );
@@ -336,7 +331,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('respeta el tamaño máximo parametrizado', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       await e.pool.query(
         `INSERT INTO parametro_versiones (clave, valor, justificacion) VALUES ('archivo_max_mb', '1', 'prueba')`,
       );
@@ -359,12 +354,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
     it('guarda el archivo cifrado: el contenido no queda en claro en el almacenamiento', async () => {
       const p = await persona();
       const contenido = pdf('texto-que-no-debe-verse-en-claro');
-      await subir(
-        p.token,
-        await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO'),
-        contenido,
-        'afiliacion.pdf',
-      );
+      await subir(p.token, await idDoc(p.token, 'PCD_SISBEN'), contenido, 'afiliacion.pdf');
       const ruta = (
         await e.pool.query<{ ruta: string }>(
           `SELECT ruta FROM documentos_solicitud WHERE solicitud_id = $1`,
@@ -376,9 +366,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       expect(crudo.subarray(0, 5).toString('latin1')).not.toBe('%PDF-');
       // Y se descarga descifrado e idéntico.
       const r = await request(e.app)
-        .get(
-          `${pub}/caracterizacion/documentos/${await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO')}/archivo`,
-        )
+        .get(`${pub}/caracterizacion/documentos/${await idDoc(p.token, 'PCD_SISBEN')}/archivo`)
         .set(bearer(p.token))
         .buffer(true)
         .parse((res, cb) => {
@@ -394,7 +382,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('un archivo alterado en el almacenamiento no se entrega (verificación de integridad)', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       await subir(p.token, id, pdf(), 'afiliacion.pdf');
       const fila = (
         await e.pool.query<{ ruta: string }>(
@@ -416,7 +404,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
     it('cada persona solo descarga sus propios documentos', async () => {
       const a = await persona();
       const b = await persona();
-      const id = await idDoc(a.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(a.token, 'PCD_SISBEN');
       await subir(a.token, id, pdf('de-a'), 'a.pdf');
       const r = await request(e.app)
         .get(`${pub}/caracterizacion/documentos/${id}/archivo`)
@@ -439,7 +427,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
   describe('reemplazo sin borrar (RNF-06)', () => {
     it('el archivo anterior queda como reemplazado y el nuevo es el vigente', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       const primero = pdf('primero');
       const segundo = jpg(3000);
       await subir(p.token, id, primero, 'v1.pdf');
@@ -465,7 +453,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('un documento cargado no se puede borrar ni modificar en la base de datos', async () => {
       const p = await persona();
-      await subir(p.token, await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO'), pdf(), 'a.pdf');
+      await subir(p.token, await idDoc(p.token, 'PCD_SISBEN'), pdf(), 'a.pdf');
       await expect(e.pool.query(`DELETE FROM documentos_solicitud`)).rejects.toThrow(
         /no se pueden borrar/,
       );
@@ -479,7 +467,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
 
     it('la bitácora registra cada carga con el hash, sin copiar el contenido', async () => {
       const p = await persona();
-      const id = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const id = await idDoc(p.token, 'PCD_SISBEN');
       await subir(p.token, id, pdf('uno'), 'uno.pdf');
       await subir(p.token, id, pdf('dos'), 'dos.pdf');
       const b = await e.pool.query(
@@ -650,7 +638,7 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
       await caracterizar(p.token, false);
       await cargarTodos(p.token);
       await request(e.app).post(`${pub}/caracterizacion/radicar`).set(bearer(p.token));
-      const doc = await idDoc(p.token, 'PCD_AFILIACION_SUBSIDIADO');
+      const doc = await idDoc(p.token, 'PCD_SISBEN');
       const subida = await subir(p.token, doc, pdf('nuevo'), 'otro.pdf');
       expect(subida.status).toBe(409);
       expect(subida.body.error.codigo).toBe('SOLICITUD_NO_EDITABLE');
@@ -926,7 +914,8 @@ describe('documentos soporte y radicación (RF-CAR-03, RF-CAR-04, RNF-06)', () =
         `SELECT detalle FROM bitacora WHERE accion = 'DOCUMENTO_CARGADO' AND solicitud_id = $1 AND detalle->>'generadoPorElSistema' = 'true'`,
         [p.solicitudId],
       );
-      expect(bitacora.rowCount).toBe(2);
+      // Las dos cartas y la constancia del régimen de salud.
+      expect(bitacora.rowCount).toBe(3);
     });
 
     it('generar de nuevo con los mismos datos no crea otra versión; con datos nuevos sí', async () => {

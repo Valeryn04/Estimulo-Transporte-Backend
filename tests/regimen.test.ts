@@ -1,12 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  RegimenDesactivado,
   RegimenHttp,
   type ConsultaRegimen,
   type ResultadoRegimen,
 } from '../src/infrastructure/bdua/regimen.js';
-import { crearEntorno, type Entorno } from './helpers.js';
+import { RegimenSimulado, crearEntorno, type Entorno } from './helpers.js';
 import { ayudantesSolicitud, bearer, pdf } from './solicitudes.js';
 
 const pub = '/api/v1/publico';
@@ -77,7 +76,7 @@ describe('filtro de régimen subsidiado en la caracterización', () => {
     e.deps.regimen = falso;
   });
   afterAll(async () => {
-    e.deps.regimen = new RegimenDesactivado();
+    e.deps.regimen = new RegimenSimulado();
     await e.cerrar();
   });
   beforeEach(() => {

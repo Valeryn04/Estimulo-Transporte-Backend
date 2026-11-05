@@ -87,6 +87,10 @@ const datosCuidador = {
   cuidadorNombre: nombre('Nombre completo del cuidador'),
   cuidadorTipoIdentificacionId: id('Tipo de identificación del cuidador'),
   cuidadorNumero: numero('Número de identificación del cuidador'),
+  /** ¿El cuidador también es una persona con discapacidad? Solo recibirá un beneficio (una sola tarjeta). */
+  cuidadorEsPcd: z
+    .boolean({ error: 'Indique si el cuidador también es una persona con discapacidad' })
+    .optional(),
 };
 
 /** Sin cuidador: la persona no tiene a quien registrar. Con cuidador: sus datos son obligatorios. */

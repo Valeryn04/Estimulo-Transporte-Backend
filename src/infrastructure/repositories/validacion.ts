@@ -189,6 +189,15 @@ export const validacionRepo = {
    * Otras solicitudes de la vigencia (o beneficios vigentes) donde aparecen la persona con discapacidad o su cuidador:
    * un cuidador que también es persona con discapacidad, uno que cuida a más de una, o quien ya recibe un beneficio.
    */
+  /** Lo que declaró la persona al preinscribirse: ¿el cuidador también es una persona con discapacidad? */
+  async cuidadorEsPcd(db: Queryable, solicitudId: number): Promise<boolean | null> {
+    const r = await db.query<{ v: boolean | null }>(
+      `SELECT cuidador_es_pcd AS v FROM solicitudes WHERE id = $1`,
+      [solicitudId],
+    );
+    return r.rows[0]?.v ?? null;
+  },
+
   async duplicidades(db: Queryable, solicitudId: number): Promise<Duplicidad[]> {
     const r = await db.query<{
       tipo: Duplicidad['tipo'];

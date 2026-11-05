@@ -39,6 +39,8 @@ export interface DatosPreinscripcion {
   cuidadorNombre?: string;
   cuidadorTipoIdentificacionId?: number;
   cuidadorNumero?: string;
+  /** El cuidador también es una persona con discapacidad. */
+  cuidadorEsPcd?: boolean;
   direccion?: string | null;
   localidadId?: number | null;
   barrioId?: number | null;
@@ -228,6 +230,7 @@ export class ServicioPreinscripcion {
           vigenciaId: vigencia.id,
           pcdId,
           cuidadorId,
+          cuidadorEsPcd: cuidadorId === null ? null : (d.cuidadorEsPcd ?? false),
           diligenciadaPor: d.diligenciadaPor ?? null,
           direccion: d.direccion?.trim() || null,
           localidadId,

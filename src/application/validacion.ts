@@ -394,6 +394,7 @@ export class ServicioValidacion {
       priorizacion: await this.vistaPriorizacion(pool, solicitudId),
       // Resultado de la consulta automática del régimen de salud (BDUA/ADRES), si se hizo.
       regimen: await consultasRegimenRepo.ultima(pool, solicitudId),
+      cuidadorEsPcd: await validacionRepo.cuidadorEsPcd(pool, solicitudId),
       duplicidades: (await validacionRepo.duplicidades(pool, solicitudId)).map((x) => ({
         ...x,
         mensaje: mensajeDuplicidad(x),

@@ -138,7 +138,7 @@ export class ServicioDocumentos {
       generado: d.generado !== null,
       hojasMinimas: d.hojasMinimas,
       // Se consulta solo con el documento de la persona: no se carga (filtro de elegibilidad).
-      automatico: d.codigo === CODIGO_AFILIACION && this.deps.regimen.activo,
+      automatico: d.codigo === CODIGO_AFILIACION,
     };
   }
 
@@ -160,6 +160,9 @@ export class ServicioDocumentos {
     const documentos = exigidos.map((d) => ({
       ...this.entrada(d, porDoc.get(d.id), reemplazos.get(d.id) ?? 0, conModelo.has(d.id)),
       consulta: d.codigo === CODIGO_AFILIACION ? consulta : null,
+      // El documento con el que se consulta: el que la persona escribió al preinscribirse.
+      documentoConsultado:
+        d.codigo === CODIGO_AFILIACION ? `${ctx.pcd.tipoNombre} ${ctx.pcd.numero}` : null,
     }));
     // Las cartas las genera el sistema al enviar la solicitud: no son algo que falte cargar.
     const obligatorios = documentos.filter((d) => d.obligatorio && !d.generado);
@@ -314,7 +317,7 @@ export class ServicioDocumentos {
         'Ese documento no se pide porque no requiere el servicio para el cuidador.',
       );
     }
-    if (documento.codigo === CODIGO_AFILIACION && this.deps.regimen.activo) {
+    if (documento.codigo === CODIGO_AFILIACION) {
       throw conflict(
         'DOCUMENTO_AUTOMATICO',
         'Este soporte no se carga: se consulta solo con el documento de la persona.',
@@ -440,6 +443,9 @@ export class ServicioDocumentos {
     const ruta = this.almacen.nuevaClave(`solicitudes/${solicitudId}`);
     await this.almacen.guardar(ruta, this.cipher.cifrarBytes(contenido));
     await withTransaction(pool, async (tx) => {
+      // Dos envíos a la vez no deben adjuntar el mismo documento dos veces: se espera el turno y se revisa de nuevo.
+      await tx.query('SELECT pg_advisory_xact_lock($1, $2)', [7301, solicitudId]);
+      if ((await documentosSolicitudRepo.vigente(tx, solicitudId, d.id))?.sha256 === sha256) return;
       const r = await documentosSolicitudRepo.reemplazar(tx, {
         solicitudId,
         documentoId: d.id,
@@ -480,7 +486,7 @@ export class ServicioDocumentos {
   async consultarRegimen(solicitudId: number, ctx: ContextoPeticion, forzar = false) {
     const { pool, regimen, ahora } = this.deps;
     const previa = await consultasRegimenRepo.ultima(pool, solicitudId);
-    if (previa?.resultado === 'SUBSIDIADO' || !regimen.activo) return this.vistaRegimen(previa);
+    if (previa?.resultado === 'SUBSIDIADO') return this.vistaRegimen(previa);
     const contexto = await caracterizacionRepo.contexto(pool, solicitudId);
     if (!contexto) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
     const edicion = await modoDeEdicion(pool, solicitudId, contexto.estado);

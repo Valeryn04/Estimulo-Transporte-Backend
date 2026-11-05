@@ -120,6 +120,28 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
       await e.servicios.correos.esperarDespachos();
     });
 
+    it('guarda si el cuidador también es una persona con discapacidad (una sola tarjeta)', async () => {
+      const si = await enviar(await datos({ cuidadorEsPcd: true }));
+      expect(si.status).toBe(201);
+      const a = await e.pool.query(
+        `SELECT cuidador_es_pcd FROM solicitudes ORDER BY id DESC LIMIT 1`,
+      );
+      expect(a.rows[0].cuidador_es_pcd).toBe(true);
+      const no = await enviar(await datos());
+      expect(no.status).toBe(201);
+      const b = await e.pool.query(
+        `SELECT cuidador_es_pcd FROM solicitudes ORDER BY id DESC LIMIT 1`,
+      );
+      expect(b.rows[0].cuidador_es_pcd).toBe(false);
+      const sin = await enviar(await datos({ tieneCuidador: false }));
+      expect(sin.status).toBe(201);
+      const c = await e.pool.query(
+        `SELECT cuidador_es_pcd FROM solicitudes ORDER BY id DESC LIMIT 1`,
+      );
+      expect(c.rows[0].cuidador_es_pcd).toBeNull();
+      await e.servicios.correos.esperarDespachos();
+    });
+
     it('guarda quién diligenció la preinscripción: la persona con discapacidad o su cuidador', async () => {
       const r = await enviar(await datos({ diligenciadaPor: 'CUIDADOR' }));
       expect(r.status).toBe(201);

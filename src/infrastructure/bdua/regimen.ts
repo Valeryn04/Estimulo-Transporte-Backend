@@ -19,7 +19,10 @@ export interface ConsultaRegimen {
 export class RegimenDesactivado implements ConsultaRegimen {
   readonly activo = false;
   async consultar(): Promise<ResultadoRegimen> {
-    return { estado: 'NO_DISPONIBLE', mensaje: 'La consulta automática no está configurada.' };
+    return {
+      estado: 'NO_DISPONIBLE',
+      mensaje: 'El servicio de consulta del régimen de salud no está configurado en el servidor.',
+    };
   }
 }
 
