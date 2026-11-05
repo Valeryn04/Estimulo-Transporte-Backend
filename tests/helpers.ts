@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import request from 'supertest';
+import { RegimenDesactivado } from '../src/infrastructure/bdua/regimen.js';
 import { TurnstileDesactivado } from '../src/infrastructure/security/turnstile.js';
 import { loadEnv } from '../src/config/env.js';
 import type { Dependencias } from '../src/application/contexto.js';
@@ -44,6 +45,7 @@ export async function crearEntorno(opciones: { ips?: string[] } = {}): Promise<E
     mailer,
     tokens: new TokenService(env.jwtSecret),
     turnstile: new TurnstileDesactivado(),
+    regimen: new RegimenDesactivado(),
     ahora: () => reloj.ahora,
   };
   const { app, servicios } = crearAplicacion(deps, { limitarIntentos: false });

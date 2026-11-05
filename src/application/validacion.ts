@@ -42,6 +42,7 @@ import { conflict, forbidden, notFound } from '../shared/errors.js';
 import type { Actor, ContextoPeticion, Dependencias } from './contexto.js';
 import type { ServicioCorreos } from './correos.js';
 import type { ServicioDocumentos } from './documentos.js';
+import { consultasRegimenRepo } from '../infrastructure/repositories/documentos.js';
 import { errorValidacion } from './esquemas.js';
 
 /** Estados en los que un funcionario puede tomar el caso para revisarlo. */
@@ -391,6 +392,8 @@ export class ServicioValidacion {
       })),
       items: items.map((i) => this.itemVista(i)),
       priorizacion: await this.vistaPriorizacion(pool, solicitudId),
+      // Resultado de la consulta automática del régimen de salud (BDUA/ADRES), si se hizo.
+      regimen: await consultasRegimenRepo.ultima(pool, solicitudId),
       duplicidades: (await validacionRepo.duplicidades(pool, solicitudId)).map((x) => ({
         ...x,
         mensaje: mensajeDuplicidad(x),

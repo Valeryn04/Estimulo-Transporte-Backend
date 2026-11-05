@@ -16,8 +16,10 @@ export interface DocumentoPrueba {
   aplicaA: string;
   obligatorio: boolean;
   generado: boolean;
+  automatico?: boolean;
   hojasMinimas: number;
   estado: string;
+  archivo?: { nombre: string } | null;
 }
 
 /** Archivo mínimo pero con el contenido real de un PDF. */
@@ -121,7 +123,9 @@ export function ayudantesSolicitud(e: Entorno) {
   }
 
   async function cargarTodos(t: string) {
-    for (const d of (await lista(t)).documentos.filter((x) => x.obligatorio && !x.generado)) {
+    for (const d of (await lista(t)).documentos.filter(
+      (x) => x.obligatorio && !x.generado && !x.automatico,
+    )) {
       const contenido = d.hojasMinimas > 1 ? await pdfConHojas(d.hojasMinimas) : pdf(d.codigo);
       const r = await subir(t, d.id, contenido, `${d.codigo}.pdf`);
       expect(r.status, JSON.stringify(r.body)).toBe(201);

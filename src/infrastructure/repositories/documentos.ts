@@ -384,3 +384,43 @@ export const modelosRepo = {
     );
   },
 };
+
+export interface ConsultaRegimenGuardada {
+  resultado: 'SUBSIDIADO' | 'NO_SUBSIDIADO' | 'NO_DISPONIBLE';
+  mensaje: string;
+  consultadaAt: Date;
+}
+
+/** Historial de la consulta del régimen de salud (BDUA/ADRES) de cada solicitud. */
+export const consultasRegimenRepo = {
+  async ultima(db: Queryable, solicitudId: number): Promise<ConsultaRegimenGuardada | null> {
+    const r = await db.query<{
+      resultado: ConsultaRegimenGuardada['resultado'];
+      mensaje: string;
+      consultada_at: Date;
+    }>(
+      `SELECT resultado, mensaje, consultada_at FROM consultas_regimen
+        WHERE solicitud_id = $1 ORDER BY id DESC LIMIT 1`,
+      [solicitudId],
+    );
+    const f = r.rows[0];
+    return f ? { resultado: f.resultado, mensaje: f.mensaje, consultadaAt: f.consultada_at } : null;
+  },
+
+  async guardar(
+    db: Queryable,
+    d: {
+      solicitudId: number;
+      tipoCodigo: string;
+      resultado: ConsultaRegimenGuardada['resultado'];
+      mensaje: string;
+      en: Date;
+    },
+  ): Promise<void> {
+    await db.query(
+      `INSERT INTO consultas_regimen (solicitud_id, tipo_codigo, resultado, mensaje, consultada_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [d.solicitudId, d.tipoCodigo, d.resultado, d.mensaje, d.en],
+    );
+  },
+};

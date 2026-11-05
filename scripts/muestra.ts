@@ -27,6 +27,14 @@ const reloj = { ahora: new Date() };
 const mailer = new MemoryMailer();
 deps.mailer = mailer; // nada sale por correo desde este script
 deps.turnstile = new TurnstileDesactivado();
+// La consulta del régimen de salud es un servicio externo: en la muestra responde «subsidiado» para toda persona.
+deps.regimen = {
+  activo: true,
+  consultar: async () => ({
+    estado: 'SUBSIDIADO',
+    mensaje: 'La persona se encuentra en estado AC',
+  }),
+};
 deps.ahora = () => reloj.ahora;
 
 const api = '/api/v1';
@@ -258,9 +266,16 @@ async function main() {
       'caracterización',
     );
     const docs = (await request(app).get(`${pub}/caracterizacion/documentos`).set(bearer(tk))).body
-      .documentos as { id: number; codigo: string; obligatorio: boolean; generado: boolean }[];
-    // Las cartas las genera el sistema solas al radicar.
-    for (const d of docs.filter((x) => x.obligatorio && !x.generado)) {
+      .documentos as {
+      id: number;
+      codigo: string;
+      obligatorio: boolean;
+      generado: boolean;
+      automatico: boolean;
+    }[];
+    // Las cartas y la constancia del régimen subsidiado las genera el sistema solas.
+    exigir(await request(app).get(`${pub}/caracterizacion/regimen`).set(bearer(tk)), 'régimen');
+    for (const d of docs.filter((x) => x.obligatorio && !x.generado && !x.automatico)) {
       exigir(
         await request(app)
           .post(`${pub}/caracterizacion/documentos/${d.id}`)

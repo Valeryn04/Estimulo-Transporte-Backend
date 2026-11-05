@@ -80,7 +80,20 @@ describe('preinscripción y verificación del correo (RF-PRE-01 a RF-PRE-04)', (
     it('entrega los catálogos activos, el texto de autorización vigente y un token de formulario', async () => {
       const f = await formulario();
       expect(f.abierta).toBe(true);
-      expect(f.tiposIdentificacion.map((t) => t.codigo)).toEqual(['CC', 'TI', 'RC', 'CE', 'PT']);
+      expect(f.tiposIdentificacion.map((t) => t.codigo)).toEqual([
+        'CC',
+        'TI',
+        'RC',
+        'CE',
+        'PT',
+        'PA',
+        'PE',
+        'SC',
+        'PC',
+        'CN',
+        'MS',
+        'AS',
+      ]);
       expect(f.localidades).toHaveLength(5);
       expect(f.barrios).toHaveLength(178);
       expect(f.autorizacion.contenido).toContain('Ley 1581 de 2012');

@@ -61,11 +61,14 @@ export class ServicioRadicacion {
     const datos = avance.secciones.flatMap((s) =>
       s.faltantes.map((f) => ({ campo: f.campo, seccion: s.codigo, mensaje: f.mensaje })),
     );
+    const lista = await this.documentos.faltantes(solicitudId);
     // Si todavía no respondió si requiere cuidador, los documentos del cuidador no se pueden evaluar.
-    const docs = (await this.documentos.faltantes(solicitudId)).map((d) => ({
+    const docs = lista.map((d) => ({
       campo: `documento:${d.id}`,
       seccion: 'documentos' as const,
-      mensaje: `Falta cargar: ${d.nombre}`,
+      mensaje: d.automatico
+        ? this.documentos.mensajeRegimen(d.consulta)
+        : `Falta cargar: ${d.nombre}`,
     }));
     return { datos, documentos: docs, completo: datos.length === 0 && docs.length === 0 };
   }
@@ -74,6 +77,8 @@ export class ServicioRadicacion {
     const { pool, ahora } = this.deps;
     const dias = await parametrosRepo.entero(pool, 'enlace_seguro_dias');
     const seguro = randomBytes(32).toString('base64url');
+    // Filtro: se vuelve a consultar el régimen de salud antes de enviar.
+    if (this.deps.regimen.activo) await this.documentos.consultarRegimen(solicitudId, ctx, true);
     // Las cartas se generan con los datos que escribió la persona, ya completos, y se adjuntan solas.
     if ((await this.pendientes(solicitudId)).datos.length === 0) {
       await this.documentos.generarCartas(solicitudId, ctx);

@@ -471,6 +471,15 @@ export function rutasPublicas(
     },
   );
 
+  /** Filtro de régimen de salud: consulta con el documento de la persona si es subsidiada y adjunta la constancia. */
+  r.get('/caracterizacion/regimen', autenticarCiudadano(tokens), async (req, res) => {
+    res.json({
+      consulta: await s.documentos.consultarRegimen(req.solicitudId as number, {
+        ip: req.ip ?? null,
+      }),
+    });
+  });
+
   /** La carta que genera el sistema con los datos escritos, para verla mientras se llena el formulario. */
   r.get(
     '/caracterizacion/documentos/:documentoId/carta',

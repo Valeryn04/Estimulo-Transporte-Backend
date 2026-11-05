@@ -21,8 +21,10 @@ import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
 import { caracterizacionRepo } from '../infrastructure/repositories/caracterizacion.js';
 import {
   documentosSolicitudRepo,
+  consultasRegimenRepo,
   modelosRepo,
   type ArchivoCargado,
+  type ConsultaRegimenGuardada,
   type DocumentoExigido,
 } from '../infrastructure/repositories/documentos.js';
 import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
@@ -31,6 +33,9 @@ import { AlmacenArchivos } from '../infrastructure/storage/almacen.js';
 import { AppError, conflict, notFound } from '../shared/errors.js';
 import type { ContextoPeticion, Dependencias } from './contexto.js';
 import { errorValidacion } from './esquemas.js';
+
+/** Soporte de afiliación al régimen subsidiado: lo reemplaza la consulta automática (BDUA/ADRES). */
+const CODIGO_AFILIACION = 'PCD_AFILIACION_SUBSIDIADO';
 
 /** Cuántas hojas tiene un PDF; null si no se puede leer. */
 async function contarHojas(contenido: Buffer): Promise<number | null> {
@@ -132,6 +137,8 @@ export class ServicioDocumentos {
       tieneModelo,
       generado: d.generado !== null,
       hojasMinimas: d.hojasMinimas,
+      // Se consulta solo con el documento de la persona: no se carga (filtro de elegibilidad).
+      automatico: d.codigo === CODIGO_AFILIACION && this.deps.regimen.activo,
     };
   }
 
@@ -149,9 +156,11 @@ export class ServicioDocumentos {
     ]);
     const edicion = await modoDeEdicion(pool, solicitudId, ctx.estado);
     const porDoc = new Map(vigentes.map((a) => [a.documentoId, a]));
-    const documentos = exigidos.map((d) =>
-      this.entrada(d, porDoc.get(d.id), reemplazos.get(d.id) ?? 0, conModelo.has(d.id)),
-    );
+    const consulta = this.vistaRegimen(await consultasRegimenRepo.ultima(pool, solicitudId));
+    const documentos = exigidos.map((d) => ({
+      ...this.entrada(d, porDoc.get(d.id), reemplazos.get(d.id) ?? 0, conModelo.has(d.id)),
+      consulta: d.codigo === CODIGO_AFILIACION ? consulta : null,
+    }));
     // Las cartas las genera el sistema al enviar la solicitud: no son algo que falte cargar.
     const obligatorios = documentos.filter((d) => d.obligatorio && !d.generado);
     return {
@@ -305,6 +314,12 @@ export class ServicioDocumentos {
         'Ese documento no se pide porque no requiere el servicio para el cuidador.',
       );
     }
+    if (documento.codigo === CODIGO_AFILIACION && this.deps.regimen.activo) {
+      throw conflict(
+        'DOCUMENTO_AUTOMATICO',
+        'Este soporte no se carga: se consulta solo con el documento de la persona.',
+      );
+    }
     if (documento.generado) {
       throw conflict(
         'DOCUMENTO_GENERADO',
@@ -406,41 +421,125 @@ export class ServicioDocumentos {
     ).filter((d) => d.generado);
     for (const d of exigidos) {
       const { carta, contenido } = await this.pdfDeCarta(solicitudId, d.generado!);
-      const sha256 = createHash('sha256').update(contenido).digest('hex');
-      const vigente = await documentosSolicitudRepo.vigente(pool, solicitudId, d.id);
-      if (vigente?.sha256 === sha256) continue;
-      const ruta = this.almacen.nuevaClave(`solicitudes/${solicitudId}`);
-      await this.almacen.guardar(ruta, this.cipher.cifrarBytes(contenido));
-      await withTransaction(pool, async (tx) => {
-        const r = await documentosSolicitudRepo.reemplazar(tx, {
-          solicitudId,
-          documentoId: d.id,
-          nombreOriginal: carta.archivo,
+      await this.adjuntarDelSistema(solicitudId, d, carta.archivo, contenido, ctx);
+    }
+  }
+
+  /** Adjunta un PDF armado por el sistema como el archivo vigente del documento (conserva el anterior como reemplazado). */
+  private async adjuntarDelSistema(
+    solicitudId: number,
+    d: { id: number; codigo: string },
+    nombre: string,
+    contenido: Buffer,
+    ctx: ContextoPeticion,
+  ): Promise<void> {
+    const { pool } = this.deps;
+    const sha256 = createHash('sha256').update(contenido).digest('hex');
+    const vigente = await documentosSolicitudRepo.vigente(pool, solicitudId, d.id);
+    if (vigente?.sha256 === sha256) return;
+    const ruta = this.almacen.nuevaClave(`solicitudes/${solicitudId}`);
+    await this.almacen.guardar(ruta, this.cipher.cifrarBytes(contenido));
+    await withTransaction(pool, async (tx) => {
+      const r = await documentosSolicitudRepo.reemplazar(tx, {
+        solicitudId,
+        documentoId: d.id,
+        nombreOriginal: nombre,
+        formato: 'pdf',
+        mime: MIME.pdf,
+        tamanoBytes: contenido.length,
+        sha256,
+        ruta,
+        ip: ctx.ip,
+      });
+      await bitacoraRepo.registrar(tx, {
+        modulo: MODULO.DOCUMENTOS,
+        accion: ACCION.DOCUMENTO_CARGADO,
+        entidad: 'documento_solicitud',
+        entidadId: r.id,
+        solicitudId,
+        valorNuevo: {
+          documento: d.codigo,
+          archivo: nombre,
           formato: 'pdf',
-          mime: MIME.pdf,
           tamanoBytes: contenido.length,
           sha256,
-          ruta,
-          ip: ctx.ip,
-        });
-        await bitacoraRepo.registrar(tx, {
-          modulo: MODULO.DOCUMENTOS,
-          accion: ACCION.DOCUMENTO_CARGADO,
-          entidad: 'documento_solicitud',
-          entidadId: r.id,
-          solicitudId,
-          valorNuevo: {
-            documento: d.codigo,
-            archivo: carta.archivo,
-            formato: 'pdf',
-            tamanoBytes: contenido.length,
-            sha256,
-          },
-          detalle: { reemplazaA: r.reemplazaA, generadoPorElSistema: true },
-          ip: ctx.ip,
-        });
+        },
+        detalle: { reemplazaA: r.reemplazaA, generadoPorElSistema: true },
+        ip: ctx.ip,
       });
+    });
+  }
+
+  // ---- régimen de salud (BDUA/ADRES): filtro de elegibilidad
+
+  /**
+   * Consulta con el documento de la persona con discapacidad si está afiliada y activa en el régimen subsidiado. Es un
+   * filtro: si lo está, la constancia de la consulta queda adjunta como su soporte de afiliación; si no lo está, o el
+   * servicio no responde, la solicitud no se puede enviar. Una consulta que ya dio «subsidiado» no se repite.
+   */
+  async consultarRegimen(solicitudId: number, ctx: ContextoPeticion, forzar = false) {
+    const { pool, regimen, ahora } = this.deps;
+    const previa = await consultasRegimenRepo.ultima(pool, solicitudId);
+    if (previa?.resultado === 'SUBSIDIADO' || !regimen.activo) return this.vistaRegimen(previa);
+    const contexto = await caracterizacionRepo.contexto(pool, solicitudId);
+    if (!contexto) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
+    const edicion = await modoDeEdicion(pool, solicitudId, contexto.estado);
+    if (edicion.modo === 'NINGUNO') return this.vistaRegimen(previa);
+    // Evita llamar al servicio varias veces seguidas si la pantalla se recarga.
+    if (!forzar && previa && ahora().getTime() - previa.consultadaAt.getTime() < 30_000) {
+      return this.vistaRegimen(previa);
     }
+    const r = await regimen.consultar(contexto.pcd.tipoCodigo, contexto.pcd.numero);
+    const en = ahora();
+    await consultasRegimenRepo.guardar(pool, {
+      solicitudId,
+      tipoCodigo: contexto.pcd.tipoCodigo,
+      resultado: r.estado,
+      mensaje: r.mensaje,
+      en,
+    });
+    if (r.estado === 'SUBSIDIADO') {
+      const doc = (await documentosSolicitudRepo.exigidos(pool, false)).find(
+        (d) => d.codigo === CODIGO_AFILIACION,
+      );
+      if (doc) {
+        const constancia = await renderCarta(
+          {
+            titulo: 'CONSTANCIA DE CONSULTA DE AFILIACIÓN AL RÉGIMEN SUBSIDIADO',
+            archivo: 'constancia-regimen-subsidiado.pdf',
+            parrafos: [
+              `Persona consultada: ${contexto.pcd.nombre}, ${contexto.pcd.tipoNombre} ${contexto.pcd.numero}.`,
+              'Resultado: afiliada y activa (AC) en el régimen subsidiado de salud.',
+              `Respuesta del servicio de consulta (BDUA/ADRES): «${r.mensaje || 'sin mensaje'}».`,
+            ],
+            firmas: [],
+            pie: `Consulta automática hecha por el sistema el ${en.toISOString()}. Sustituye el documento de afiliación que antes debía adjuntar la persona.`,
+          },
+          en,
+        );
+        await this.adjuntarDelSistema(
+          solicitudId,
+          doc,
+          'constancia-regimen-subsidiado.pdf',
+          constancia,
+          ctx,
+        );
+      }
+    }
+    return this.vistaRegimen({ resultado: r.estado, mensaje: r.mensaje, consultadaAt: en });
+  }
+
+  /** Lo que se le dice a la persona cuando la consulta no la confirma como afiliada al régimen subsidiado. */
+  mensajeRegimen(c: { estado: string } | null): string {
+    return c?.estado === 'NO_DISPONIBLE'
+      ? 'No pudimos confirmar su afiliación al régimen subsidiado porque el servicio de consulta no respondió. Intente de nuevo en unos minutos.'
+      : 'La consulta no muestra a la persona con discapacidad como afiliada y activa en el régimen subsidiado de salud, requisito para solicitar el beneficio.';
+  }
+
+  private vistaRegimen(c: ConsultaRegimenGuardada | null) {
+    return c
+      ? { estado: c.resultado, mensaje: c.mensaje, consultadaAt: c.consultadaAt.toISOString() }
+      : null;
   }
 
   /** Entrega a la persona el archivo que cargó, descifrado y verificado contra su hash (RNF-06). */

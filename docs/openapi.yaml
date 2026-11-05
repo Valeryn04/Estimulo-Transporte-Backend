@@ -378,6 +378,29 @@ paths:
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
+  /publico/caracterizacion/regimen:
+    get:
+      tags: [Portal ciudadano]
+      summary: Consultar si la persona con discapacidad es del régimen subsidiado
+      description: 'Filtro de elegibilidad. Consulta el servicio BDUA/ADRES con el documento de la persona con discapacidad. Si está afiliada y activa en el régimen subsidiado, adjunta sola la constancia como soporte de afiliación; si no, o si el servicio no responde, la solicitud no se puede enviar. Con el servicio sin configurar devuelve la consulta guardada (o null) y el soporte se carga a mano.'
+      security: [{ bearerCiudadano: [] }]
+      responses:
+        '200':
+          description: Resultado de la consulta
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  consulta:
+                    nullable: true
+                    type: object
+                    properties:
+                      estado: { type: string, enum: [SUBSIDIADO, NO_SUBSIDIADO, NO_DISPONIBLE] }
+                      mensaje: { type: string }
+                      consultadaAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
   /publico/caracterizacion/documentos/{documentoId}/carta:
     get:
       tags: [Portal ciudadano]

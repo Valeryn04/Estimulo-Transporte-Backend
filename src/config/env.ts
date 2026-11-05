@@ -36,6 +36,9 @@ const schema = z.object({
   // Cloudflare Turnstile: con ambas llaves se exige la verificación en los formularios públicos y el inicio de sesión.
   TURNSTILE_SITE_KEY: z.string().default(''),
   TURNSTILE_SECRET: z.string().default(''),
+  // Consulta automática del régimen de salud (BDUA/ADRES). Sin ambas variables la persona carga el soporte a mano.
+  BDUA_URL: z.string().default(''),
+  BDUA_TOKEN: z.string().default(''),
 });
 
 export interface EncryptionKeys {
@@ -73,6 +76,8 @@ export interface Env {
   apiDocs: boolean;
   /** Llaves de Cloudflare Turnstile; null = verificación desactivada. */
   turnstile: { siteKey: string; secret: string } | null;
+  /** Servicio de consulta del régimen de salud; null = desactivado. */
+  bdua: { url: string; token: string } | null;
 }
 
 /** Interpreta "v1:base64,v2:base64": la primera llave es la activa. */
@@ -115,6 +120,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       e.TURNSTILE_SITE_KEY && e.TURNSTILE_SECRET
         ? { siteKey: e.TURNSTILE_SITE_KEY, secret: e.TURNSTILE_SECRET }
         : null,
+    bdua: e.BDUA_URL && e.BDUA_TOKEN ? { url: e.BDUA_URL, token: e.BDUA_TOKEN } : null,
     apiDocs: e.API_DOCS ? e.API_DOCS === 'true' : e.NODE_ENV !== 'production',
     cookieSecure,
     nodeEnv: e.NODE_ENV,

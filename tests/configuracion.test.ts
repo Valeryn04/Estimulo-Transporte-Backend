@@ -42,7 +42,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
     it('trae los catálogos iniciales del documento: tipos de identificación, transporte y causales', async () => {
       const resumen = (await get('/catalogos')).body.items as { catalogo: string; total: number }[];
       const total = (c: string) => resumen.find((x) => x.catalogo === c)?.total;
-      expect(total('TIPO_IDENTIFICACION')).toBe(5);
+      expect(total('TIPO_IDENTIFICACION')).toBe(12);
       expect(total('TIPO_TRANSPORTE')).toBe(2);
       expect(total('CAUSAL_REVOCATORIA')).toBe(6);
       expect(total('LOCALIDAD')).toBe(5);
@@ -54,6 +54,13 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'RC',
         'CE',
         'PT',
+        'PA',
+        'PE',
+        'SC',
+        'PC',
+        'CN',
+        'MS',
+        'AS',
       ]);
     });
 
@@ -141,12 +148,18 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
     });
 
     it('un tipo de identificación exige su sigla', async () => {
-      const r = await post('/catalogos/TIPO_IDENTIFICACION/items', { nombre: 'Pasaporte' });
+      const r = await post('/catalogos/TIPO_IDENTIFICACION/items', {
+        nombre: 'Documento de prueba',
+      });
       expect(r.status).toBe(422);
       expect(r.body.error.errores[0].campo).toBe('codigo');
       expect(
-        (await post('/catalogos/TIPO_IDENTIFICACION/items', { nombre: 'Pasaporte', codigo: 'PA' }))
-          .status,
+        (
+          await post('/catalogos/TIPO_IDENTIFICACION/items', {
+            nombre: 'Documento de prueba',
+            codigo: 'ZZ',
+          })
+        ).status,
       ).toBe(201);
     });
 
