@@ -44,11 +44,21 @@ export class RegimenHttp implements ConsultaRegimen {
         signal: AbortSignal.timeout(8_000),
       });
       if (!r.ok) {
+        // Se deja constancia de quién rechazó la llamada: la protección de Cloudflare o el propio servicio.
+        const cuerpo = (await r.text().catch(() => '')).slice(0, 4000);
+        const motivo = /cloudflare|attention required/i.test(cuerpo)
+          ? 'la protección de Cloudflare bloqueó la llamada del servidor'
+          : cuerpo
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 120) || 'sin detalle';
         return {
           estado: 'NO_DISPONIBLE',
-          mensaje: `El servicio respondió con el estado ${r.status}.`,
+          mensaje: `El servicio respondió con el estado ${r.status}: ${motivo}.`,
         };
       }
+
       const j = (await r.json()) as { subsidiado?: unknown; mensaje?: unknown };
       const mensaje = typeof j.mensaje === 'string' ? j.mensaje : '';
       const subsidiado = j.subsidiado === 1 || j.subsidiado === '1' || j.subsidiado === true;
