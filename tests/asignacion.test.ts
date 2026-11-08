@@ -233,16 +233,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       });
     });
 
-    it('cambiar los cupos o el presupuesto exige motivo y soporte, y todo queda registrado', async () => {
-      const sinSoporte = await ajustar(
-        responsable,
-        { cuposTotales: 3, motivo: 'Cupos de la vigencia' },
-        false,
-      );
-      expect(sinSoporte.status).toBe(422);
-      expect(sinSoporte.body.error.errores.map((x: { campo: string }) => x.campo)).toContain(
-        'archivo',
-      );
+    it('cambiar los cupos o el valor exige solo el motivo, el presupuesto sale solo y todo queda registrado', async () => {
       const sinMotivo = await ajustar(responsable, { cuposTotales: 3, motivo: 'corto' });
       expect(sinMotivo.status).toBe(422);
       expect(sinMotivo.body.error.errores[0].campo).toBe('motivo');
@@ -255,19 +246,16 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       const sinJson = await request(e.app).put(`${adm}/asignacion/cupos`).set(auth(responsable));
       expect(sinJson.status).toBe(422);
 
-      const ok = await ajustar(responsable, {
-        cuposTotales: 3,
-        presupuestoTotal: 2_500_000,
-        motivo: 'Resolución de la vigencia 2026',
-      });
+      // Sin soporte: solo el motivo es obligatorio. Con 3 cupos y sin valor todavía, el presupuesto es 0.
+      const ok = await ajustar(
+        responsable,
+        { cuposTotales: 3, motivo: 'Resolución de la vigencia 2026' },
+        false,
+      );
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
       expect(ok.body.cupos).toMatchObject({ totales: 3, disponibles: 3 });
-      expect(ok.body.presupuesto).toMatchObject({
-        total: 2_500_000,
-        comprometido: 0,
-        disponible: 2_500_000,
-      });
-      // El valor del estímulo no exige soporte, pero sí motivo.
+      expect(ok.body.presupuesto).toMatchObject({ total: 0, comprometido: 0, disponible: 0 });
+      // El valor estándar por persona define el presupuesto: 3 cupos × 500.000 × 2 personas.
       const valor = await ajustar(
         responsable,
         { valorEstimulo: 500_000, motivo: 'Valor definido por la Gerencia' },
@@ -275,6 +263,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       );
       expect(valor.status, JSON.stringify(valor.body)).toBe(200);
       expect(valor.body.valorEstimulo).toBe(500_000);
+      expect(valor.body.presupuesto).toMatchObject({ total: 3_000_000, disponible: 3_000_000 });
       // Si otra persona ya cambió el valor mientras se editaba, no se pisa su cambio.
       const desactualizado = await ajustar(
         responsable,
@@ -309,10 +298,8 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         valorNuevo: 3,
         creadoPor: responsable.usuario,
       });
-      expect(cupos.soporte?.nombre).toBe('acto-de-adicion.pdf');
-      const soporte = await get(analista, `/cupos/ajustes/${cupos.id}/soporte`);
-      expect(soporte.status).toBe(200);
-      expect(Buffer.from(soporte.body).toString('latin1')).toContain('%PDF');
+      // El soporte es opcional: estos cambios se hicieron sin él.
+      expect(cupos.soporte).toBeNull();
       const valorId = historial.find((h) => h.tipo === 'VALOR_ESTIMULO')!.id;
       expect((await get(analista, `/cupos/ajustes/${valorId}/soporte`)).status).toBe(404);
       // El historial es inmutable.
@@ -388,6 +375,14 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         false,
       );
       expect(quitar.body.distribucion.localidades).toEqual([]);
+      // El resto del recorrido trabaja con 2 cupos: el presupuesto que resulta es 2 × 500.000 × 2 personas.
+      const dos = await ajustar(
+        responsable,
+        { cuposTotales: 2, motivo: 'Dos cupos para el recorrido' },
+        false,
+      );
+      expect(dos.status, JSON.stringify(dos.body)).toBe(200);
+      expect(dos.body.presupuesto.total).toBe(2_000_000);
     });
   });
 
@@ -410,10 +405,8 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         false,
         false,
       ]);
-      expect(p.items[2]).toMatchObject({
-        motivo: 'SIN_PRESUPUESTO',
-        motivoTexto: 'No alcanza el presupuesto disponible',
-      });
+      // El presupuesto sale de los cupos: lo que no cabe es por falta de cupo.
+      expect(p.items[2]).toMatchObject({ motivo: 'SIN_CUPO' });
       expect(p.items[0]).toMatchObject({ puntajeFinal: 90, posicion: 1 });
     });
 
@@ -461,8 +454,8 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         reemplazaRadicado: null,
       });
       const f = (await get(asignador, '/cupos')).body;
-      expect(f.cupos).toMatchObject({ ocupados: 1, disponibles: 2 });
-      expect(f.presupuesto).toMatchObject({ comprometido: 1_000_000, disponible: 1_500_000 });
+      expect(f.cupos).toMatchObject({ ocupados: 1, disponibles: 1 });
+      expect(f.presupuesto).toMatchObject({ comprometido: 1_000_000, disponible: 1_000_000 });
     });
 
     it('al asignar se notifica por correo con las instrucciones de la entrega y el caso lo ve en su consulta', async () => {
@@ -497,10 +490,10 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
     it('asigna el caso que se había saltado, sin pedir causa, y todo queda en la bitácora', async () => {
       const r = await post(asignador, '/asignar', { solicitudIds: [casoA.solicitudId] });
       expect(r.status, JSON.stringify(r.body)).toBe(201);
-      expect(r.body.resumen.cupos).toMatchObject({ ocupados: 2, disponibles: 1 });
+      expect(r.body.resumen.cupos).toMatchObject({ ocupados: 2, disponibles: 0 });
       expect(r.body.resumen.presupuesto).toMatchObject({
         comprometido: 2_000_000,
-        disponible: 500_000,
+        disponible: 0,
       });
       const bit = await e.pool.query(
         `SELECT usuario_id FROM bitacora WHERE accion = 'BENEFICIO_ASIGNADO' ORDER BY id`,
@@ -575,8 +568,8 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
         { ip: null },
       );
       const f = (await get(asignador, '/cupos')).body;
-      expect(f.cupos).toMatchObject({ ocupados: 1, liberados: 1, disponibles: 2 });
-      expect(f.presupuesto).toMatchObject({ comprometido: 1_000_000, disponible: 1_500_000 });
+      expect(f.cupos).toMatchObject({ ocupados: 1, liberados: 1, disponibles: 1 });
+      expect(f.presupuesto).toMatchObject({ comprometido: 1_000_000, disponible: 1_000_000 });
       const libre = await e.pool.query(
         `SELECT vigente FROM beneficio_personas WHERE beneficio_id = $1`,
         [beneficioB],
@@ -631,7 +624,7 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       expect(p.items[1]).toMatchObject({
         radicado: casoD.radicado,
         alcanza: false,
-        motivo: 'SIN_PRESUPUESTO',
+        motivo: 'SIN_CUPO',
       });
       const conCupo = await post(asignador, '/lista-espera', { solicitudIds: [casoC.solicitudId] });
       expect(conCupo.status).toBe(409);
@@ -669,16 +662,17 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
       ).toBe(1);
     });
 
-    it('los cupos y el presupuesto no pueden quedar por debajo de lo ocupado', async () => {
+    it('los cupos y el presupuesto que resulta no pueden quedar por debajo de lo ocupado y comprometido', async () => {
       const cupos = await ajustar(responsable, { cuposTotales: 1, motivo: 'Reducción de cupos' });
       expect(cupos.status).toBe(422);
       expect(cupos.body.error.errores[0].campo).toBe('cuposTotales');
+      // Bajar el valor por persona dejaría el presupuesto por debajo de lo ya comprometido.
       const dinero = await ajustar(responsable, {
-        presupuestoTotal: 1_000_000,
-        motivo: 'Reducción del presupuesto',
+        valorEstimulo: 100_000,
+        motivo: 'Reducción del valor por persona',
       });
       expect(dinero.status).toBe(422);
-      expect(dinero.body.error.errores[0].campo).toBe('presupuestoTotal');
+      expect(dinero.body.error.errores[0].campo).toBe('valorEstimulo');
     });
   });
 });

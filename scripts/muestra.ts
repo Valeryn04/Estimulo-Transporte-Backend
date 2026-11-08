@@ -161,11 +161,9 @@ async function main() {
         JSON.stringify({
           cuposTotales: 6,
           valorEstimulo: 500_000,
-          presupuestoTotal: 6_000_000,
           motivo: 'Configuración inicial de cupos y presupuesto de la vigencia 2026',
         }),
-      )
-      .attach('archivo', pdf('acto'), 'acto-presupuestal-2026.pdf'),
+      ),
     'cupos',
   );
 

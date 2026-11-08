@@ -2203,8 +2203,8 @@ paths:
         '409': { $ref: '#/components/responses/ReglaDeNegocio' }
     put:
       tags: [Asignación]
-      summary: Modificar cupos, valor del estímulo, presupuesto o distribución
-      description: 'multipart/form-data: el campo «datos» trae el JSON del cambio y «archivo» el soporte (por ejemplo, el acto de adición presupuestal), obligatorio al cambiar los cupos o el presupuesto. El motivo es obligatorio y cada cambio queda registrado de forma inmutable. Los cupos no pueden quedar por debajo de los ocupados ni el presupuesto por debajo de lo comprometido.'
+      summary: Modificar cupos, valor del estímulo o distribución (el presupuesto sale solo)
+      description: 'multipart/form-data: el campo «datos» trae el JSON del cambio y «archivo» un soporte opcional. El presupuesto no se escribe: se calcula como cupos × valor estándar del estímulo por persona × 2 personas por cupo (la persona con discapacidad y su cuidador). El motivo es obligatorio y cada cambio queda registrado de forma inmutable. Los cupos no pueden quedar por debajo de los ocupados ni el presupuesto resultante por debajo de lo comprometido.'
       security: [{ bearerInterno: [] }]
       requestBody:
         required: true
@@ -2217,7 +2217,7 @@ paths:
                 datos:
                   {
                     type: string,
-                    description: 'JSON: cuposTotales?, valorEstimulo?, presupuestoTotal?, distribucionLocalidad? [{itemId, cupos}], distribucionTransporte? [{itemId, cupos}], motivo',
+                    description: 'JSON: cuposTotales?, valorEstimulo?, distribucionLocalidad? [{itemId, cupos}], distribucionTransporte? [{itemId, cupos}], motivo',
                   }
                 archivo: { type: string, format: binary }
       responses:

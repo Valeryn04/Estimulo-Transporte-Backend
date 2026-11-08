@@ -29,14 +29,19 @@ import type { ServicioCorreos } from './correos.js';
 import type { ArchivoEntrada, ServicioDocumentos } from './documentos.js';
 import { errorValidacion } from './esquemas.js';
 
+/**
+ * Personas que puede tener un cupo (la persona con discapacidad y su cuidador): el presupuesto de la vigencia sale solo
+ * de los cupos y el valor estándar del estímulo por persona.
+ */
+export const PERSONAS_POR_CUPO = 2;
+
 export interface AjusteEntrada {
   cuposTotales?: number;
   valorEstimulo?: number;
-  presupuestoTotal?: number;
   distribucionLocalidad?: { itemId: number; cupos: number }[];
   distribucionTransporte?: { itemId: number; cupos: number }[];
   /** Valores que la pantalla tenía cargados al editar, para no pisar el cambio de otra persona. */
-  base?: { cuposTotales?: number; valorEstimulo?: number; presupuestoTotal?: number };
+  base?: { cuposTotales?: number; valorEstimulo?: number };
   motivo: string;
 }
 
@@ -130,8 +135,8 @@ export class ServicioAsignacion {
   }
 
   /**
-   * Modifica cupos, valor del estímulo, presupuesto o su distribución. Cada cambio queda registrado con su motivo;
-   * subir los cupos o el presupuesto exige el soporte (por ejemplo, el acto de adición presupuestal).
+   * Modifica cupos, valor estándar del estímulo o su distribución. El presupuesto no se escribe: sale solo (cupos ×
+   * valor × personas por cupo). Cada cambio queda registrado con su motivo; el soporte es opcional.
    */
   async ajustar(
     actor: Actor,
@@ -153,16 +158,9 @@ export class ServicioAsignacion {
     const hayCambio =
       d.cuposTotales !== undefined ||
       d.valorEstimulo !== undefined ||
-      d.presupuestoTotal !== undefined ||
       d.distribucionLocalidad !== undefined ||
       d.distribucionTransporte !== undefined;
     if (!hayCambio) errores.push({ campo: 'motivo', mensaje: 'Indique qué desea modificar' });
-    if ((d.cuposTotales !== undefined || d.presupuestoTotal !== undefined) && !archivo) {
-      errores.push({
-        campo: 'archivo',
-        mensaje: 'Soporte: adjunte el documento que respalda el cambio de cupos o presupuesto',
-      });
-    }
     if (errores.length > 0) throw errorValidacion(errores);
     const soporte = archivo ? await this.documentos.guardarEvidencia(`cupos/${id}`, archivo) : null;
 
@@ -174,7 +172,6 @@ export class ServicioAsignacion {
       for (const [campo, nombre] of [
         ['cuposTotales', 'los cupos'],
         ['valorEstimulo', 'el valor del estímulo'],
-        ['presupuestoTotal', 'el presupuesto'],
       ] as const) {
         const cargado = d.base?.[campo];
         if (d[campo] !== undefined && cargado !== undefined && Number(fin[campo]) !== cargado) {
@@ -186,16 +183,23 @@ export class ServicioAsignacion {
       }
       const problemas: { campo: string; mensaje: string }[] = [];
       const cuposNuevos = d.cuposTotales ?? fin.cuposTotales;
+      const valorNuevo = d.valorEstimulo ?? fin.valorEstimulo;
+      // El presupuesto se calcula solo; si no cambian ni los cupos ni el valor, se deja el que ya tenía la vigencia.
+      const recalcula = d.cuposTotales !== undefined || d.valorEstimulo !== undefined;
+      const presupuestoNuevo = recalcula
+        ? redondearMoneda(cuposNuevos * valorNuevo * PERSONAS_POR_CUPO)
+        : fin.presupuestoTotal;
       if (d.cuposTotales !== undefined && d.cuposTotales < fin.ocupados) {
         problemas.push({
           campo: 'cuposTotales',
           mensaje: `Cupos: no pueden ser menos que los ${fin.ocupados} que ya están ocupados`,
         });
       }
-      if (d.presupuestoTotal !== undefined && d.presupuestoTotal < fin.comprometido) {
+      if (presupuestoNuevo < fin.comprometido) {
         problemas.push({
-          campo: 'presupuestoTotal',
-          mensaje: 'Presupuesto: no puede ser menor que el ya comprometido',
+          campo: d.valorEstimulo !== undefined ? 'valorEstimulo' : 'cuposTotales',
+          mensaje:
+            'El presupuesto que resulta (cupos × valor por persona) no puede ser menor que el ya comprometido',
         });
       }
       const distribuciones: [
@@ -268,11 +272,11 @@ export class ServicioAsignacion {
           nuevo: d.valorEstimulo,
         });
       }
-      if (d.presupuestoTotal !== undefined && d.presupuestoTotal !== fin.presupuestoTotal) {
+      if (presupuestoNuevo !== fin.presupuestoTotal) {
         cambios.push({
           tipo: 'PRESUPUESTO',
           anterior: fin.presupuestoTotal,
-          nuevo: d.presupuestoTotal,
+          nuevo: presupuestoNuevo,
         });
       }
       const sinCambio = (items: { itemId: number; cupos: number }[], tipo: TipoDistribucion) => {
@@ -297,15 +301,10 @@ export class ServicioAsignacion {
           { campo: 'motivo', mensaje: 'No hay ningún cambio respecto a lo vigente' },
         ]);
       }
-      if (cambios.some((c) => (c.tipo === 'CUPOS' || c.tipo === 'PRESUPUESTO') && !soporte)) {
-        throw errorValidacion([
-          { campo: 'archivo', mensaje: 'Soporte: adjunte el documento del cambio' },
-        ]);
-      }
       await asignacionRepo.actualizarVigencia(tx, id, {
         cuposTotales: d.cuposTotales,
         valorEstimulo: d.valorEstimulo,
-        presupuestoTotal: d.presupuestoTotal,
+        presupuestoTotal: recalcula ? presupuestoNuevo : undefined,
       });
       for (const [tipo, , items] of distribuciones) {
         if (items && cambios.some((c) => c.tipo === `DISTRIBUCION_${tipo}`)) {

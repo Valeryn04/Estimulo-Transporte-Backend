@@ -29,17 +29,11 @@ const ajusteSchema = z.object({
     .min(0, 'Valor del estímulo: no puede ser negativo')
     .max(1_000_000_000, 'Valor del estímulo: demasiado grande')
     .optional(),
-  presupuestoTotal: z
-    .number({ error: 'Presupuesto: escriba un número' })
-    .min(0, 'Presupuesto: no puede ser negativo')
-    .max(10_000_000_000_000, 'Presupuesto: demasiado grande')
-    .optional(),
   // Lo que la pantalla tenía cargado: si otra persona lo cambió mientras tanto, no se pisa su cambio.
   base: z
     .object({
       cuposTotales: z.number().optional(),
       valorEstimulo: z.number().optional(),
-      presupuestoTotal: z.number().optional(),
     })
     .optional(),
   distribucionLocalidad: z.array(itemDistribucionSchema).max(100).optional(),
@@ -132,7 +126,7 @@ export function rutasAsignacion(s: Servicios): Router {
     res.json(await s.asignacion.finanzas(vigenciaSchema.parse(req.query.vigenciaId)));
   });
 
-  /** Modificar cupos, valor, presupuesto o distribución: multipart con `datos` (JSON) y el soporte en `archivo`. */
+  /** Modificar cupos, valor estándar del estímulo o distribución (el presupuesto sale solo): multipart con `datos`; el archivo es opcional. */
   r.put('/cupos', administrar, recibirArchivo, async (req, res) => {
     let crudo: unknown;
     try {
