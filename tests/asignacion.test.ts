@@ -142,13 +142,13 @@ describe('cupos, asignación y lista de espera (RF-ASI-01..04)', () => {
     casoB = await ay.validada(validador, valores('SEVERA', 'GRUPO_A'), {
       correo: 'caso.b@correo.com',
     });
-    casoC = await ay.validada(validador, valores('MODERADA', 'GRUPO_B'), {
+    casoC = await ay.validada(validador, valores('MODERADA', 'OTRO'), {
       correo: 'caso.c@correo.com',
     });
-    casoD = await ay.validada(validador, valores('LEVE', 'GRUPO_C'), {
+    casoD = await ay.validada(validador, valores('LEVE', 'OTRO'), {
       correo: 'caso.d@correo.com',
     });
-    casoE = await ay.validada(validador, valores('LEVE', 'GRUPO_C'), {
+    casoE = await ay.validada(validador, valores('LEVE', 'OTRO'), {
       correo: 'caso.e@correo.com',
     });
   });

@@ -212,7 +212,7 @@ describe('priorización (RF-PRI-01..04)', () => {
       await asignarEnBd(e, s.solicitudId, validador.id);
       await valPost(validador, `/casos/${s.solicitudId}/tomar`);
       const caso = (await val(validador, `/casos/${s.solicitudId}`)).body;
-      expect(caso.priorizacion.matrizVersion).toBe(3);
+      expect(caso.priorizacion.matrizVersion).toBe(4);
       expect(caso.priorizacion.variables.map((v: { codigo: string }) => v.codigo)).toEqual([
         'DEPENDENCIA_FUNCIONAL',
         'GRUPO_SISBEN',
@@ -233,7 +233,7 @@ describe('priorización (RF-PRI-01..04)', () => {
       });
       expect(sin.status).toBe(422);
       expect(JSON.stringify(sin.body)).toContain('datos de priorización');
-      expect(JSON.stringify(sin.body)).toContain('Dependencia funcional');
+      expect(JSON.stringify(sin.body)).toContain('Grado de dependencia funcional');
       // Valores inválidos o de otra variable no se aceptan.
       const malo = await valPut(validador, `/casos/${s.solicitudId}/variables/GRUPO_SISBEN`, {
         valor: 'SEVERA',
@@ -273,7 +273,7 @@ describe('priorización (RF-PRI-01..04)', () => {
       expect(c.puntaje).toBe(90);
       expect(c.puntajeFinal).toBe(90);
       expect(c.calculos).toHaveLength(1);
-      expect(c.calculos[0]).toMatchObject({ matrizVersion: 3, vigente: true, calculadoPor: null });
+      expect(c.calculos[0]).toMatchObject({ matrizVersion: 4, vigente: true, calculadoPor: null });
       expect(c.calculos[0].detalle).toHaveLength(7);
       expect(c.calculos[0].detalle[0]).toMatchObject({
         variable: 'DEPENDENCIA_FUNCIONAL',
@@ -291,15 +291,15 @@ describe('priorización (RF-PRI-01..04)', () => {
     });
 
     it('los demás casos de prueba: baja prioridad, empates por dependencia y empate total', async () => {
-      casoB = await validada({ DEPENDENCIA_FUNCIONAL: 'MODERADA', GRUPO_SISBEN: 'GRUPO_B' });
+      casoB = await validada({ DEPENDENCIA_FUNCIONAL: 'MODERADA', GRUPO_SISBEN: 'OTRO' });
       tieX = await validada({ DEPENDENCIA_FUNCIONAL: 'MODERADA', GRUPO_SISBEN: 'GRUPO_A' });
       tieY = await validada({
         DEPENDENCIA_FUNCIONAL: 'LEVE',
         GRUPO_SISBEN: 'GRUPO_A',
         ENFERMEDAD_CRONICA: 'SI',
       });
-      gemeloP = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'GRUPO_C' });
-      gemeloQ = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'GRUPO_C' });
+      gemeloP = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'OTRO' });
+      gemeloQ = await validada({ DEPENDENCIA_FUNCIONAL: 'LEVE', GRUPO_SISBEN: 'OTRO' });
       // Al quedar validado y priorizado, el aviso le llega a quien asigna.
       const avisos = (await request(e.app).get(`${adm}/alertas`).set(auth(asignador))).body
         .items as { tipo: string; solicitudId: number | null }[];
@@ -307,10 +307,10 @@ describe('priorización (RF-PRI-01..04)', () => {
         avisos.some((x) => x.tipo === 'CASO_PRIORIZADO' && x.solicitudId === casoB.solicitudId),
       ).toBe(true);
       const puntaje = async (id: number) => (await pri(asignador, `/casos/${id}`)).body.puntaje;
-      expect(await puntaje(casoB.solicitudId)).toBe(35);
+      expect(await puntaje(casoB.solicitudId)).toBe(20);
       expect(await puntaje(tieX.solicitudId)).toBe(40);
       expect(await puntaje(tieY.solicitudId)).toBe(40);
-      expect(await puntaje(gemeloP.solicitudId)).toBe(18);
+      expect(await puntaje(gemeloP.solicitudId)).toBe(10);
     });
   });
 
@@ -341,23 +341,23 @@ describe('priorización (RF-PRI-01..04)', () => {
         puntajeFinal: number;
         criterioDesempate: string | null;
       }[];
-      expect(r.body.matrizVersion).toBe(3);
+      expect(r.body.matrizVersion).toBe(4);
       expect(filas.map((f) => f.radicado)).toEqual([
         casoA.radicado, // 90
         tieX.radicado, // 40: mayor dependencia que tieY
         tieY.radicado, // 40
-        casoB.radicado, // 35
-        gemeloP.radicado, // 18: radicada antes que gemeloQ
+        casoB.radicado, // 20
+        gemeloP.radicado, // 10: radicada antes que gemeloQ
         gemeloQ.radicado,
       ]);
       expect(filas.map((f) => f.posicion)).toEqual([1, 2, 3, 4, 5, 6]);
       expect(filas[0]!.criterioDesempate).toBeNull();
       expect(filas[1]!.criterioDesempate).toBeNull();
-      expect(filas[2]!.criterioDesempate).toBe('Mayor puntaje en «Dependencia funcional»');
+      expect(filas[2]!.criterioDesempate).toBe('Mayor puntaje en «Grado de dependencia funcional»');
       expect(filas[5]!.criterioDesempate).toBe('Fecha de radicación más antigua');
       expect(r.body.desempate).toEqual([
-        'Mayor puntaje en «Dependencia funcional»',
-        'Mayor puntaje en «Grupo del SISBÉN IV»',
+        'Mayor puntaje en «Grado de dependencia funcional»',
+        'Mayor puntaje en «Clasificación en el grupo A del SISBÉN IV»',
         'Fecha de radicación más antigua',
       ]);
     });
@@ -486,14 +486,14 @@ describe('priorización (RF-PRI-01..04)', () => {
       expect(r.body).toMatchObject({
         estado: 'PROPUESTA',
         ajuste: 20,
-        puntajeOriginal: 35,
-        puntajeConAjuste: 55,
+        puntajeOriginal: 20,
+        puntajeConAjuste: 40,
         propuestaPor: asignador.usuario,
       });
       expect(r.body.evidencia).toMatchObject({ nombre: 'soporte.pdf', mime: 'application/pdf' });
       // Sigue en su lugar y se marca la propuesta pendiente.
       const fila = (await pri(asignador, `/listado?q=${casoB.radicado}`)).body.items[0];
-      expect(fila).toMatchObject({ puntajeFinal: 35, ajuste: 0, excepcionPendiente: true });
+      expect(fila).toMatchObject({ puntajeFinal: 20, ajuste: 0, excepcionPendiente: true });
       // Solo una propuesta abierta por caso.
       const otra = await proponer(asignador, casoB.solicitudId, {
         ajuste: '5',
@@ -570,15 +570,15 @@ describe('priorización (RF-PRI-01..04)', () => {
       }[];
       const fila = listado.find((x) => x.radicado === casoB.radicado)!;
       expect(fila).toMatchObject({
-        puntaje: 35,
+        puntaje: 20,
         ajuste: 20,
-        puntajeFinal: 55,
+        puntajeFinal: 40,
         excepcionPendiente: false,
       });
-      // Con el ajuste pasa del cuarto al segundo lugar.
-      expect(fila.posicion).toBe(2);
+      // Con el ajuste pasa del cuarto al tercer lugar (empata con los de 40 y gana a tieY por dependencia).
+      expect(fila.posicion).toBe(3);
       const c = (await pri(asignador, `/casos/${casoB.solicitudId}`)).body;
-      expect(c).toMatchObject({ puntaje: 35, ajuste: 20, puntajeFinal: 55 });
+      expect(c).toMatchObject({ puntaje: 20, ajuste: 20, puntajeFinal: 40 });
       expect(c.excepciones).toHaveLength(1);
       // Una excepción decidida no se toca ni se decide de nuevo.
       expect((await decidir(responsable, { decision: 'APROBAR' })).status).toBe(409);
@@ -612,20 +612,20 @@ describe('priorización (RF-PRI-01..04)', () => {
 
     it('lista las versiones y trae la vigente con sus variables y el puntaje máximo', async () => {
       const lista = await mat(admin);
-      expect(lista.body.items).toHaveLength(3);
-      expect(lista.body.items[0]).toMatchObject({ version: 3, estado: 'VIGENTE' });
+      expect(lista.body.items).toHaveLength(4);
+      expect(lista.body.items[0]).toMatchObject({ version: 4, estado: 'VIGENTE' });
       vigenteId = lista.body.items[0].id;
       const m = (await mat(admin, `/${vigenteId}`)).body;
       expect(m.puntajeMaximo).toBe(90);
       expect(m.variables).toHaveLength(7);
-      expect(m.desempateTexto[0]).toContain('Dependencia funcional');
+      expect(m.desempateTexto[0]).toContain('Grado de dependencia funcional');
       expect((await mat(admin, '/99999')).status).toBe(404);
     });
 
     it('se crea un borrador como copia de la vigente y se edita; solo hay uno abierto a la vez', async () => {
       const r = await matPost(admin, '');
       expect(r.status, JSON.stringify(r.body)).toBe(201);
-      expect(r.body).toMatchObject({ version: 4, estado: 'BORRADOR', creadaPor: admin.usuario });
+      expect(r.body).toMatchObject({ version: 5, estado: 'BORRADOR', creadaPor: admin.usuario });
       borradorId = r.body.id;
       const otra = await matPost(admin, '');
       expect(otra.status).toBe(409);
@@ -667,14 +667,15 @@ describe('priorización (RF-PRI-01..04)', () => {
       const sim = await mat(admin, `/${borradorId}/simulacion`);
       expect(sim.status, JSON.stringify(sim.body)).toBe(200);
       expect(sim.body.resumen).toMatchObject({ casos: 6, conPuntajeActual: 6 });
-      expect(sim.body.resumen.cambianPosicion).toBeGreaterThan(0);
-      expect(sim.body.matriz).toMatchObject({ version: 4, puntajeMaximo: 115 });
+      // Con el doble peso a la dependencia el orden no cambia: A, X, Y, B y los gemelos conservan su lugar.
+      expect(sim.body.resumen.cambianPosicion).toBe(0);
+      expect(sim.body.matriz).toMatchObject({ version: 5, puntajeMaximo: 115 });
       const b = sim.body.items.find((x: { radicado: string }) => x.radicado === casoB.radicado);
-      // Con más peso a la dependencia, B (moderada) pasa de 35 a 50 y supera a tieY (40 → 45).
-      expect(b).toMatchObject({ puntajeActual: 35, puntajeSimulado: 50 });
+      // Con más peso a la dependencia, B (moderada) pasa de 20 a 35 y sigue por debajo de tieY (40 → 45).
+      expect(b).toMatchObject({ puntajeActual: 20, puntajeSimulado: 35 });
       const y = sim.body.items.find((x: { radicado: string }) => x.radicado === tieY.radicado);
       expect(y).toMatchObject({ puntajeActual: 40, puntajeSimulado: 45 });
-      expect(b.posicionSimulada).toBeLessThan(y.posicionSimulada);
+      expect(b.posicionSimulada).toBeGreaterThan(y.posicionSimulada);
       expect(sim.body.items[0].posicionSimulada).toBe(1);
       const despues = await e.pool.query(`SELECT COUNT(*)::int AS n FROM priorizaciones`);
       expect(despues.rows[0].n).toBe(antes.rows[0].n);
@@ -708,7 +709,8 @@ describe('priorización (RF-PRI-01..04)', () => {
       expect(ok.body).toMatchObject({ estado: 'VIGENTE', decididaPor: responsable.usuario });
       const lista = (await mat(admin)).body.items as { version: number; estado: string }[];
       expect(lista.map((x) => [x.version, x.estado])).toEqual([
-        [4, 'VIGENTE'],
+        [5, 'VIGENTE'],
+        [4, 'ARCHIVADA'],
         [3, 'ARCHIVADA'],
         [2, 'ARCHIVADA'],
         [1, 'ARCHIVADA'],
@@ -733,19 +735,19 @@ describe('priorización (RF-PRI-01..04)', () => {
 
     it('los casos ya calculados conservan su versión; el cálculo masivo con «recalcular» usa la nueva y deja la historia', async () => {
       const antes = (await pri(asignador, `/casos/${tieY.solicitudId}`)).body;
-      expect(antes.calculos[0].matrizVersion).toBe(3);
+      expect(antes.calculos[0].matrizVersion).toBe(4);
       expect(antes.puntaje).toBe(40);
       // Sin recalcular no cambia nada.
       const nada = await priPost(asignador, '/calcular', {});
       expect(nada.body).toMatchObject({
-        matrizVersion: 4,
+        matrizVersion: 5,
         calculados: 0,
         sinCambio: 6,
         omitidos: [],
       });
       const masivo = await priPost(asignador, '/calcular', { recalcular: true });
       expect(masivo.status, JSON.stringify(masivo.body)).toBe(200);
-      expect(masivo.body).toMatchObject({ matrizVersion: 4, calculados: 6, sinCambio: 0 });
+      expect(masivo.body).toMatchObject({ matrizVersion: 5, calculados: 6, sinCambio: 0 });
       const despues = (await pri(asignador, `/casos/${tieY.solicitudId}`)).body;
       expect(despues.puntaje).toBe(45);
       expect(
@@ -754,14 +756,14 @@ describe('priorización (RF-PRI-01..04)', () => {
           c.vigente,
         ]),
       ).toEqual([
-        [4, true],
-        [3, false],
+        [5, true],
+        [4, false],
       ]);
       // Una vez recalculado con la versión vigente, otro cálculo masivo no repite nada.
       expect((await priPost(asignador, '/calcular', { recalcular: true })).body.calculados).toBe(0);
       // El ajuste aprobado era del cálculo anterior: ya no se aplica y hay que proponerlo de nuevo.
       const b = (await pri(asignador, `/casos/${casoB.solicitudId}`)).body;
-      expect(b).toMatchObject({ puntaje: 50, ajuste: 0, puntajeFinal: 50 });
+      expect(b).toMatchObject({ puntaje: 35, ajuste: 0, puntajeFinal: 35 });
       expect(b.excepciones[0]).toMatchObject({ estado: 'APROBADA', aplicable: false });
     });
 
@@ -769,7 +771,7 @@ describe('priorización (RF-PRI-01..04)', () => {
       const r = await priPost(asignador, `/casos/${tieX.solicitudId}/calcular`);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       expect(r.body.puntaje).toBe(55);
-      expect(r.body.matrizVersion).toBe(4);
+      expect(r.body.matrizVersion).toBe(5);
       const aun = await ay.solicitudRadicada();
       expect((await priPost(asignador, `/casos/${aun.solicitudId}/calcular`)).status).toBe(409);
       expect((await priPost(asignador, '/casos/99999/calcular')).status).toBe(404);
@@ -779,7 +781,7 @@ describe('priorización (RF-PRI-01..04)', () => {
 
     it('una versión rechazada queda en la historia y se puede crear otra a partir de ella', async () => {
       const nueva = await matPost(admin, '');
-      expect(nueva.body.version).toBe(5);
+      expect(nueva.body.version).toBe(6);
       await matPost(admin, `/${nueva.body.id}/solicitar-aprobacion`);
       const rechazo = await matPost(responsable, `/${nueva.body.id}/decision`, {
         decision: 'RECHAZAR',
@@ -791,7 +793,7 @@ describe('priorización (RF-PRI-01..04)', () => {
       });
       const otra = await matPost(admin, '', { desdeId: nueva.body.id });
       expect(otra.status).toBe(201);
-      expect(otra.body.version).toBe(6);
+      expect(otra.body.version).toBe(7);
       expect((await matPost(admin, '', { desdeId: 99999 })).status).toBe(404);
     });
   });
