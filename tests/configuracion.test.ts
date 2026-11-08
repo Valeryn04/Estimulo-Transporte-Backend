@@ -306,6 +306,7 @@ describe('configuración del programa (RF-ADM-02, RF-PRE-03)', () => {
         'plazo_recursos_dias',
         'plazo_subsanacion_dias',
         'reenvio_verificacion_minutos',
+        'roles_individuales',
         'sesion_inactividad_minutos',
         'sesion_maxima_horas',
         'subsanacion_recordatorio_dias',

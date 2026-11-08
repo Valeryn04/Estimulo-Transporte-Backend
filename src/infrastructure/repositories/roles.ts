@@ -8,6 +8,11 @@ export interface RolFila {
   descripcion: string;
   /** Roles del documento (numeral 3.2): no se eliminan ni se renombran. */
   sistema: boolean;
+  /**
+   * Cuándo se ofrece al crear o editar usuarios: GENERAL siempre; UNIDO con los roles unidos (por defecto);
+   * INDIVIDUAL cuando se activa «roles_individuales».
+   */
+  oferta: 'GENERAL' | 'UNIDO' | 'INDIVIDUAL';
   permisos: string[];
   /** Usuarios que tienen este rol. */
   usuarios: number;
@@ -27,7 +32,7 @@ export interface DatosRol {
   permisos: string[];
 }
 
-const SELECT = `SELECT r.id, r.codigo, r.nombre, r.descripcion, r.sistema,
+const SELECT = `SELECT r.id, r.codigo, r.nombre, r.descripcion, r.sistema, r.oferta,
        COALESCE(array_agg(DISTINCT rp.permiso_codigo) FILTER (WHERE rp.permiso_codigo IS NOT NULL), '{}') AS permisos,
        (SELECT count(*)::int FROM usuario_rol ur WHERE ur.rol_id = r.id) AS usuarios
   FROM roles r LEFT JOIN rol_permiso rp ON rp.rol_id = r.id`;

@@ -42,7 +42,7 @@ describe('roles y permisos (RF-ADM-01)', () => {
   const porCodigo = async (codigo: string) => (await roles()).find((r) => r.codigo === codigo)!;
 
   describe('consulta', () => {
-    it('lista los 7 roles del sistema con sus permisos y cuántos usuarios los tienen', async () => {
+    it('lista los roles del sistema (7 individuales y 2 unidos) con sus permisos y cuántos usuarios los tienen', async () => {
       const lista = await roles();
       const sistema = lista.filter((r) => r.sistema);
       expect(sistema.map((r) => r.codigo).sort()).toEqual([
@@ -52,7 +52,9 @@ describe('roles y permisos (RF-ADM-01)', () => {
         'AUDITOR_VERIFICADOR',
         'CONTROL_INTERNO',
         'GESTOR_NOVEDADES',
+        'OPERATIVO',
         'RESPONSABLE_PROCESO',
+        'SEGUIMIENTO',
       ]);
       const administrador = sistema.find((r) => r.codigo === 'ADMINISTRADOR')!;
       expect(administrador.permisos).toEqual(

@@ -21,6 +21,10 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
   beforeAll(async () => {
     e = await crearEntorno();
     admin = await crearCuenta(e, 'ADMINISTRADOR');
+    // Estas pruebas crean usuarios con los roles individuales: se activa ese modo (por defecto los roles están unidos).
+    await e.pool.query(
+      `INSERT INTO parametro_versiones (clave, valor, justificacion) VALUES ('roles_individuales', 'true', 'prueba')`,
+    );
     const r = await request(e.app).get(`${api}/admin/roles`).set(auth(admin));
     rolIds = Object.fromEntries(
       (r.body.items as { id: number; codigo: string }[]).map((x) => [x.codigo, x.id]),
@@ -86,7 +90,7 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
     ).toBe(403);
   });
 
-  it('lista los 7 roles del numeral 3.2 con sus permisos', async () => {
+  it('lista los roles del sistema: los 7 individuales y los 2 unidos', async () => {
     expect(Object.keys(rolIds).sort()).toEqual(
       [
         'ADMINISTRADOR',
@@ -95,9 +99,91 @@ describe('administración de usuarios y de su rol (RF-ADM-01)', () => {
         'AUDITOR_VERIFICADOR',
         'CONTROL_INTERNO',
         'GESTOR_NOVEDADES',
+        'OPERATIVO',
         'RESPONSABLE_PROCESO',
+        'SEGUIMIENTO',
       ].sort(),
     );
+  });
+
+  describe('roles unidos o individuales', () => {
+    const modo = (individuales: boolean) =>
+      e.pool.query(
+        `INSERT INTO parametro_versiones (clave, valor, justificacion) VALUES ('roles_individuales', $1, 'prueba')`,
+        [String(individuales)],
+      );
+    const ofrecidos = async () =>
+      (
+        (await request(e.app).get(`${api}/admin/roles`).set(auth(admin))).body.items as {
+          codigo: string;
+          ofrecido: boolean;
+        }[]
+      )
+        .filter((r) => r.ofrecido)
+        .map((r) => r.codigo)
+        .sort();
+    const crear = (rolId: number) =>
+      request(e.app).post(`${api}/admin/usuarios`).set(auth(admin)).send(nuevo({ rolId }));
+
+    afterAll(async () => {
+      await modo(true);
+    });
+
+    it('por defecto se ofrecen los roles unidos y no los individuales', async () => {
+      await modo(false);
+      expect(await ofrecidos()).toEqual(
+        ['ADMINISTRADOR', 'OPERATIVO', 'RESPONSABLE_PROCESO', 'SEGUIMIENTO'].sort(),
+      );
+      const individual = await crear(rolIds.AUDITOR_VERIFICADOR!);
+      expect(individual.status).toBe(422);
+      expect(individual.body.error.errores[0].campo).toBe('rolId');
+      expect(individual.body.error.errores[0].mensaje).toContain('estén unidos');
+      const unido = await crear(rolIds.OPERATIVO!);
+      expect(unido.status, JSON.stringify(unido.body)).toBe(201);
+      expect(unido.body.rol.codigo).toBe('OPERATIVO');
+    });
+
+    it('el rol unido Operativo reúne los permisos de validar, priorizar, asignar y novedades', async () => {
+      const roles = (await request(e.app).get(`${api}/admin/roles`).set(auth(admin))).body
+        .items as { codigo: string; permisos: string[] }[];
+      const de = (c: string) => roles.find((r) => r.codigo === c)!.permisos;
+      for (const individual of ['AUDITOR_VERIFICADOR', 'ASIGNADOR', 'GESTOR_NOVEDADES']) {
+        expect(de('OPERATIVO')).toEqual(expect.arrayContaining(de(individual)));
+      }
+      for (const individual of ['ANALISTA', 'CONTROL_INTERNO']) {
+        expect(de('SEGUIMIENTO')).toEqual(expect.arrayContaining(de(individual)));
+      }
+    });
+
+    it('al activar los roles individuales se ofrecen esos y quien ya tiene un rol unido lo conserva', async () => {
+      await modo(false);
+      const existente = await crear(rolIds.OPERATIVO!);
+      expect(existente.status).toBe(201);
+      await modo(true);
+      expect(await ofrecidos()).toEqual(
+        [
+          'ADMINISTRADOR',
+          'ANALISTA',
+          'ASIGNADOR',
+          'AUDITOR_VERIFICADOR',
+          'CONTROL_INTERNO',
+          'GESTOR_NOVEDADES',
+          'RESPONSABLE_PROCESO',
+        ].sort(),
+      );
+      expect((await crear(rolIds.OPERATIVO!)).status).toBe(422);
+      expect((await crear(rolIds.ASIGNADOR!)).status).toBe(201);
+      // Editar a quien ya tiene el rol unido (sin cambiárselo) sigue funcionando.
+      const editar = await request(e.app)
+        .put(`${api}/admin/usuarios/${existente.body.id}`)
+        .set(auth(admin))
+        .send({
+          nombres: 'Nombre Corregido',
+          correo: existente.body.correo,
+          rolId: rolIds.OPERATIVO,
+        });
+      expect(editar.status, JSON.stringify(editar.body)).toBe(200);
+    });
   });
 
   it('crea un usuario con su rol, exige cambio de contraseña y lo registra en la bitácora', async () => {

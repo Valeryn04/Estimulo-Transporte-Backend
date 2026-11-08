@@ -2,7 +2,9 @@ import { ACCION, MODULO } from '../domain/acciones.js';
 import { generarPasswordTemporal } from '../domain/passwords.js';
 import { withTransaction, type Queryable } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
+import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
 import { rolesRepo } from '../infrastructure/repositories/roles.js';
+import { rolOfrecido } from './roles.js';
 import {
   usuariosRepo,
   type EstadoUsuario,
@@ -101,10 +103,25 @@ export class ServicioUsuarios {
     return vista(u, await usuariosRepo.rolAsignado(this.deps.pool, id), this.deps.ahora());
   }
 
-  private async validarRol(db: Queryable, rolId: number): Promise<void> {
+  /**
+   * El rol debe existir y estar disponible en el modo de roles vigente (unidos o individuales); quien ya lo tiene lo
+   * conserva aunque no se ofrezca.
+   */
+  private async validarRol(db: Queryable, rolId: number, rolActualId?: number): Promise<void> {
     const existentes = await rolesRepo.idsExistentes(db, [rolId]);
     if (!existentes.has(rolId)) {
       throw errorValidacion([{ campo: 'rolId', mensaje: 'Rol: elija un rol de la lista' }]);
+    }
+    if (rolId === rolActualId) return;
+    const rol = await rolesRepo.porId(db, rolId);
+    const individuales = (await parametrosRepo.texto(db, 'roles_individuales')) === 'true';
+    if (rol && !rolOfrecido(rol.oferta, individuales)) {
+      throw errorValidacion([
+        {
+          campo: 'rolId',
+          mensaje: `Rol: «${rol.nombre}» no está disponible mientras los roles ${individuales ? 'sean individuales' : 'estén unidos'}`,
+        },
+      ]);
     }
   }
 
@@ -207,7 +224,8 @@ export class ServicioUsuarios {
       if (u.estado === 'BAJA') {
         throw conflict('USUARIO_DE_BAJA', 'Un usuario dado de baja no puede modificarse');
       }
-      await this.validarRol(tx, d.rolId);
+      const rolActual = await usuariosRepo.rolAsignado(tx, id);
+      await this.validarRol(tx, d.rolId, rolActual?.id);
       await this.validarProtegido(tx, u, d.rolId);
       const anterior = {
         nombres: u.nombres,

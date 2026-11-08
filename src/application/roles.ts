@@ -3,6 +3,7 @@ import { ACCION, MODULO } from '../domain/acciones.js';
 import { codigoDesdeNombre } from '../domain/texto.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
+import { parametrosRepo } from '../infrastructure/repositories/parametros.js';
 import { rolesRepo, type DatosRol, type RolFila } from '../infrastructure/repositories/roles.js';
 import { usuariosRepo } from '../infrastructure/repositories/usuarios.js';
 import { conflict, notFound } from '../shared/errors.js';
@@ -33,11 +34,28 @@ const resumen = (r: RolFila) => ({
  * administrador puede crear roles propios y elegir qué permisos tiene cada uno. Cada usuario tiene un solo rol, y un
  * cambio en los permisos de un rol se aplica de inmediato a quienes lo tienen.
  */
+/** Si un rol se ofrece al crear o editar usuarios con el modo de roles vigente. */
+export function rolOfrecido(
+  oferta: 'GENERAL' | 'UNIDO' | 'INDIVIDUAL',
+  individuales: boolean,
+): boolean {
+  return oferta === 'GENERAL' || (individuales ? oferta === 'INDIVIDUAL' : oferta === 'UNIDO');
+}
+
 export class ServicioRoles {
   constructor(private readonly deps: Dependencias) {}
 
-  listar() {
-    return rolesRepo.listar(this.deps.pool);
+  /** Los roles, con la marca de cuáles se ofrecen hoy al crear o editar usuarios (según «roles_individuales»). */
+  async listar() {
+    const individuales = await this.rolesIndividuales();
+    return (await rolesRepo.listar(this.deps.pool)).map((r) => ({
+      ...r,
+      ofrecido: rolOfrecido(r.oferta, individuales),
+    }));
+  }
+
+  private async rolesIndividuales(): Promise<boolean> {
+    return (await parametrosRepo.texto(this.deps.pool, 'roles_individuales')) === 'true';
   }
 
   permisos() {
