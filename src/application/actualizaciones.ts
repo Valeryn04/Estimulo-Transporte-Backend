@@ -55,7 +55,7 @@ export class ServicioActualizaciones {
     actor: Actor,
     beneficioId: number,
     d: { causalId: number; fechaEfectiva: string; observacion: string },
-    archivo: ArchivoEntrada,
+    archivo: ArchivoEntrada | null,
     ctx: ContextoPeticion,
   ): Promise<void> {
     const { pool } = this.deps;
@@ -67,7 +67,9 @@ export class ServicioActualizaciones {
         },
       ]);
     }
-    const evidencia = await this.documentos.guardarEvidencia(`novedades/${beneficioId}`, archivo);
+    const evidencia = archivo
+      ? await this.documentos.guardarEvidencia(`novedades/${beneficioId}`, archivo)
+      : null;
     await withTransaction(pool, async (tx) => {
       await fijarActor(tx, actor.id);
       const b = await entregasRepo.beneficio(tx, beneficioId, true);
@@ -143,8 +145,8 @@ export class ServicioActualizaciones {
         detalle: {
           beneficioId,
           fechaEfectiva: d.fechaEfectiva,
-          evidencia: evidencia.nombre,
-          sha256: evidencia.sha256,
+          evidencia: evidencia?.nombre ?? null,
+          sha256: evidencia?.sha256 ?? null,
           correoId,
         },
         ip: ctx.ip,

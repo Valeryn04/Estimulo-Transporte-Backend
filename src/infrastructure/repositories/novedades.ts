@@ -11,7 +11,8 @@ export interface Novedad {
   causal: string | null;
   fechaEfectiva: string;
   observacion: string;
-  evidencia: { nombre: string; tamanoBytes: number };
+  /** Archivo opcional: la justificación es lo único obligatorio. */
+  evidencia: { nombre: string; tamanoBytes: number } | null;
   responsable: string;
   correoId: number | null;
   levantamientoProgramado: string | null;
@@ -38,8 +39,8 @@ interface FilaNovedad {
   causal: string | null;
   fecha_efectiva: string;
   observacion: string;
-  evidencia_nombre: string;
-  evidencia_tamano: number;
+  evidencia_nombre: string | null;
+  evidencia_tamano: number | null;
   responsable: string;
   correo_id: string | null;
   levantamiento_programado: string | null;
@@ -56,7 +57,10 @@ const mapearNovedad = (f: FilaNovedad): Novedad => ({
   causal: f.causal,
   fechaEfectiva: f.fecha_efectiva,
   observacion: f.observacion,
-  evidencia: { nombre: f.evidencia_nombre, tamanoBytes: f.evidencia_tamano },
+  evidencia:
+    f.evidencia_nombre !== null
+      ? { nombre: f.evidencia_nombre, tamanoBytes: f.evidencia_tamano ?? 0 }
+      : null,
   responsable: f.responsable,
   correoId: f.correo_id === null ? null : Number(f.correo_id),
   levantamientoProgramado: f.levantamiento_programado,
@@ -96,7 +100,7 @@ export const novedadesRepo = {
       causalId: number | null;
       fechaEfectiva: string;
       observacion: string;
-      evidencia: EvidenciaGuardada;
+      evidencia: EvidenciaGuardada | null;
       usuarioId: number;
       levantamientoProgramado: string | null;
       levantaNovedadId: number | null;
@@ -115,11 +119,11 @@ export const novedadesRepo = {
         d.causalId,
         d.fechaEfectiva,
         d.observacion,
-        d.evidencia.ruta,
-        d.evidencia.nombre,
-        d.evidencia.mime,
-        d.evidencia.tamanoBytes,
-        d.evidencia.sha256,
+        d.evidencia?.ruta ?? null,
+        d.evidencia?.nombre ?? null,
+        d.evidencia?.mime ?? null,
+        d.evidencia?.tamanoBytes ?? null,
+        d.evidencia?.sha256 ?? null,
         d.usuarioId,
         d.levantamientoProgramado,
         d.levantaNovedadId,

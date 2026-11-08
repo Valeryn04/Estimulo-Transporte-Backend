@@ -2502,7 +2502,7 @@ paths:
     post:
       tags: [Novedades]
       summary: 'Bloquear, suspender o reactivar un beneficio (RF-NOV-01)'
-      description: 'multipart/form-data. Exige causal (catálogo), fecha efectiva, evidencia y responsable; comunica a la persona por correo. Los bloqueos pueden traer una fecha de levantamiento programada, al cumplirse la cual se alerta al gestor. El historial no se borra.'
+      description: 'multipart/form-data. Exige causal (catálogo), fecha efectiva y justificación; el archivo de soporte es opcional. Comunica a la persona por correo. Los bloqueos pueden traer una fecha de levantamiento programada, al cumplirse la cual se alerta al gestor. El historial no se borra.'
       security: [{ bearerInterno: [] }]
       requestBody:
         required: true
@@ -3039,7 +3039,7 @@ paths:
     post:
       tags: [Novedades]
       summary: Finalizar el beneficio (RF-BEN-05)
-      description: 'Multipart: «datos» (JSON con causalId, fechaEfectiva y observacion) y «archivo» con el soporte. Libera el cupo, alerta al asignador y avisa a la persona por correo. No se puede finalizar con una revocatoria en curso.'
+      description: 'Multipart: «datos» (JSON con causalId, fechaEfectiva y observacion) y, si se quiere, «archivo» con un soporte (opcional). Libera el cupo, alerta al asignador y avisa a la persona por correo. No se puede finalizar con una revocatoria en curso.'
       security: [{ bearerInterno: [] }]
       responses:
         '201': { description: Beneficio finalizado }

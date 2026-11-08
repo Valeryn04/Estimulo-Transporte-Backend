@@ -128,15 +128,16 @@ export class ServicioNovedades {
       observacion: string;
       levantamientoProgramado?: string;
     },
-    archivo: ArchivoEntrada,
+    archivo: ArchivoEntrada | null,
     ctx: ContextoPeticion,
   ) {
     const { pool } = this.deps;
     const errores: { campo: string; mensaje: string }[] = [];
-    if (d.tipo === 'LEVANTAMIENTO' && d.observacion.trim().length < 5) {
+    // La justificación es lo único obligatorio: el archivo de soporte es opcional.
+    if (d.observacion.trim().length < 5) {
       errores.push({
         campo: 'observacion',
-        mensaje: 'Observación: explique la reactivación (mínimo 5 caracteres)',
+        mensaje: 'Justificación: explique la novedad (mínimo 5 caracteres)',
       });
     }
     if (d.tipo !== 'LEVANTAMIENTO' && !d.causalId) {
@@ -149,7 +150,9 @@ export class ServicioNovedades {
       });
     }
     if (errores.length > 0) throw errorValidacion(errores);
-    const evidencia = await this.documentos.guardarEvidencia(`novedades/${beneficioId}`, archivo);
+    const evidencia = archivo
+      ? await this.documentos.guardarEvidencia(`novedades/${beneficioId}`, archivo)
+      : null;
 
     const nombreCausal = { valor: '' };
     await withTransaction(pool, async (tx) => {
@@ -234,8 +237,8 @@ export class ServicioNovedades {
           causal: nombreCausal.valor || null,
           fechaEfectiva: d.fechaEfectiva,
           levantamientoProgramado: d.levantamientoProgramado ?? null,
-          evidencia: evidencia.nombre,
-          sha256: evidencia.sha256,
+          evidencia: evidencia?.nombre ?? null,
+          sha256: evidencia?.sha256 ?? null,
           correoId,
         },
         ip: ctx.ip,
@@ -247,7 +250,7 @@ export class ServicioNovedades {
 
   async evidenciaDeNovedad(id: number) {
     const e = await novedadesRepo.evidencia(this.deps.pool, id);
-    if (!e) throw notFound('La novedad no existe', 'NOVEDAD_NO_ENCONTRADA');
+    if (!e) throw notFound('Esta novedad no tiene archivo adjunto', 'NOVEDAD_NO_ENCONTRADA');
     return this.documentos.leerEvidencia(e);
   }
 

@@ -179,7 +179,7 @@ export function rutasNovedades(s: Servicios): Router {
     res.json(await s.novedades.beneficio(idParam(req)));
   });
 
-  /** Bloquear, suspender o reactivar: multipart con `datos` y la evidencia en `archivo`. */
+  /** Bloquear, suspender o reactivar: multipart con `datos`; el archivo es opcional (solo la justificación es obligatoria). */
   r.post('/beneficios/:id/novedades', gestionar, recibirArchivo, async (req, res) => {
     const d = datosDe(req, novedadSchema);
     res
@@ -189,7 +189,7 @@ export function rutasNovedades(s: Servicios): Router {
           req.actor!,
           idParam(req),
           d,
-          archivoDe(req),
+          req.file ? archivoDe(req) : null,
           contexto(req),
         ),
       );
@@ -197,7 +197,13 @@ export function rutasNovedades(s: Servicios): Router {
 
   r.post('/beneficios/:id/finalizar', gestionar, recibirArchivo, async (req, res) => {
     const d = datosDe(req, finalizarSchema);
-    await s.actualizaciones.finalizar(req.actor!, idParam(req), d, archivoDe(req), contexto(req));
+    await s.actualizaciones.finalizar(
+      req.actor!,
+      idParam(req),
+      d,
+      req.file ? archivoDe(req) : null,
+      contexto(req),
+    );
     res.status(201).json(await s.novedades.beneficio(idParam(req)));
   });
 

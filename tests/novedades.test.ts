@@ -145,9 +145,17 @@ describe('novedades, revocatoria y alertas de cruce (RF-NOV-01..03)', () => {
         fechaEfectiva: hoy(),
         observacion: 'Reporte recibido',
       };
+      // Solo la justificación es obligatoria: el archivo de soporte ya no se exige.
       expect(
-        campos(await multipart(gestor, `/beneficios/${benA}/novedades`, base, false)),
-      ).toContain('archivo');
+        campos(
+          await multipart(
+            gestor,
+            `/beneficios/${benA}/novedades`,
+            { ...base, observacion: '' },
+            false,
+          ),
+        ),
+      ).toContain('observacion');
       expect(
         campos(
           await multipart(gestor, `/beneficios/${benA}/novedades`, {
@@ -237,7 +245,7 @@ describe('novedades, revocatoria y alertas de cruce (RF-NOV-01..03)', () => {
         tipo: 'SUSPENSION',
         causalId: causalBloqueo,
         fechaEfectiva: hoy(),
-        observacion: 'Otra',
+        observacion: 'Otra novedad',
       });
       expect(otra.status).toBe(409);
       await expect(
