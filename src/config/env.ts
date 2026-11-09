@@ -33,9 +33,6 @@ const schema = z.object({
   INTERNAL_ALLOWED_IPS: z.string().default(''),
   COOKIE_SECURE: z.enum(['true', 'false']).optional(),
   API_DOCS: z.enum(['true', 'false']).optional(),
-  // Cloudflare Turnstile: con ambas llaves se exige la verificación en los formularios públicos y el inicio de sesión.
-  TURNSTILE_SITE_KEY: z.string().default(''),
-  TURNSTILE_SECRET: z.string().default(''),
   // Consulta automática del régimen de salud (BDUA/ADRES). Sin ambas variables la persona carga el soporte a mano.
   BDUA_URL: z.string().default(''),
   BDUA_TOKEN: z.string().default(''),
@@ -78,8 +75,6 @@ export interface Env {
   cookieSecure: boolean;
   /** Publica la documentación OpenAPI en /api/docs. Por defecto, solo fuera de producción. */
   apiDocs: boolean;
-  /** Llaves de Cloudflare Turnstile; null = verificación desactivada. */
-  turnstile: { siteKey: string; secret: string } | null;
   /** Servicio de consulta del régimen de salud; null = desactivado. */
   bdua: { url: string; token: string } | null;
   /** Respuesta simulada del servicio (solo fuera de producción); null = se usa el servicio real. */
@@ -127,10 +122,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     );
   }
   return {
-    turnstile:
-      e.TURNSTILE_SITE_KEY && e.TURNSTILE_SECRET
-        ? { siteKey: e.TURNSTILE_SITE_KEY, secret: e.TURNSTILE_SECRET }
-        : null,
     bdua: e.BDUA_URL && e.BDUA_TOKEN ? { url: e.BDUA_URL, token: e.BDUA_TOKEN } : null,
     bduaSimulado:
       e.BDUA_SIMULAR === 'true'

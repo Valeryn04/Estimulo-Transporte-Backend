@@ -1,9 +1,5 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
-import {
-  exigirTurnstile,
-  type VerificadorTurnstile,
-} from '../../../infrastructure/security/turnstile.js';
 import type { Env } from '../../../config/env.js';
 import type { SesionIniciada } from '../../../application/autenticacion.js';
 import type { Servicios } from '../../../container.js';
@@ -34,12 +30,7 @@ const cambioSchema = z.object({
 });
 
 /** Autenticación de usuarios internos (RF-ADM-01, RNF-05). */
-export function rutasAuth(
-  s: Servicios,
-  limites: Limitadores,
-  env: Env,
-  turnstile: VerificadorTurnstile,
-): Router {
+export function rutasAuth(s: Servicios, limites: Limitadores, env: Env): Router {
   const r = Router();
   const desdePortal = soloDesdeElPortal(env);
 
@@ -54,7 +45,7 @@ export function rutasAuth(
     permitirCambioPendiente: true,
   });
 
-  r.post('/login', limites.login, exigirTurnstile(turnstile), async (req, res) => {
+  r.post('/login', limites.login, async (req, res) => {
     const d = loginSchema.parse(req.body);
     responder(res, await s.autenticacion.login(d.usuario, d.password, contexto(req)));
   });

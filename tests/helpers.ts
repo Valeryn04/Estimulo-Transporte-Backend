@@ -1,7 +1,6 @@
 import type { Express } from 'express';
 import request from 'supertest';
 import type { ConsultaRegimen } from '../src/infrastructure/bdua/regimen.js';
-import { TurnstileDesactivado } from '../src/infrastructure/security/turnstile.js';
 import { loadEnv } from '../src/config/env.js';
 import type { Dependencias } from '../src/application/contexto.js';
 import { createPool, type Pool } from '../src/infrastructure/db/pool.js';
@@ -44,7 +43,6 @@ export async function crearEntorno(opciones: { ips?: string[] } = {}): Promise<E
     pool,
     mailer,
     tokens: new TokenService(env.jwtSecret),
-    turnstile: new TurnstileDesactivado(),
     regimen: new RegimenSimulado(),
     ahora: () => reloj.ahora,
   };

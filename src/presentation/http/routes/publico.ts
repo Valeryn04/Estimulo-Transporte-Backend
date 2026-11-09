@@ -2,10 +2,6 @@ import { MENSAJE_DIRECCION, esDireccionEstandar } from '../../../domain/direccio
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Servicios } from '../../../container.js';
-import {
-  exigirTurnstile,
-  type VerificadorTurnstile,
-} from '../../../infrastructure/security/turnstile.js';
 import type { TokenService } from '../../../infrastructure/security/tokens.js';
 import type { CambiosCaracterizacion } from '../../../application/caracterizacion.js';
 import { normalizarTelefono } from '../../../domain/caracterizacion.js';
@@ -274,26 +270,15 @@ const caracterizacionSchema = z
   .strict();
 
 /** Portal ciudadano: no requiere sesión. Cada ruta lleva su límite de peticiones (RNF-04). */
-export function rutasPublicas(
-  s: Servicios,
-  limites: Limitadores,
-  tokens: TokenService,
-  turnstile: VerificadorTurnstile,
-): Router {
+export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenService): Router {
   const r = Router();
-  const robot = exigirTurnstile(turnstile);
-
-  /** Configuración que necesita el portal antes de pintar los formularios. */
-  r.get('/config', (_req, res) => {
-    res.json({ turnstileSiteKey: turnstile.siteKey });
-  });
 
   /** Datos del formulario de preinscripción: catálogos activos, texto de autorización y token anti-automatización. */
   r.get('/preinscripcion/formulario', limites.formulario, async (_req, res) => {
     res.json(await s.preinscripcion.formulario());
   });
 
-  r.post('/preinscripciones', limites.preinscripcion, robot, async (req, res) => {
+  r.post('/preinscripciones', limites.preinscripcion, async (req, res) => {
     const sinCuidador =
       (req.body as { tieneCuidador?: unknown } | undefined)?.tieneCuidador === false;
     const d = sinCuidador
@@ -314,7 +299,7 @@ export function rutasPublicas(
     res.json(await s.preinscripcion.verificarCorreo(token, { ip: req.ip ?? null }));
   });
 
-  r.post('/preinscripciones/reenviar-verificacion', limites.reenvio, robot, async (req, res) => {
+  r.post('/preinscripciones/reenviar-verificacion', limites.reenvio, async (req, res) => {
     const d = reenvioSchema.parse(req.body);
     await s.preinscripcion.reenviarVerificacion(d, { ip: req.ip ?? null });
     // Respuesta idéntica exista o no la solicitud: no se revela qué identificaciones están registradas.
@@ -327,7 +312,7 @@ export function rutasPublicas(
   // ---- consulta del estado (RF-PRE-05)
 
   /** Envía un código de un solo uso al correo verificado. Responde igual exista o no la solicitud. */
-  r.post('/consulta/solicitar-codigo', limites.codigo, robot, async (req, res) => {
+  r.post('/consulta/solicitar-codigo', limites.codigo, async (req, res) => {
     const d = solicitudConsultaSchema.parse(req.body);
     await s.consulta.solicitarCodigo(d, { ip: req.ip ?? null });
     res.status(202).json({

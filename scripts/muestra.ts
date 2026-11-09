@@ -4,7 +4,6 @@ import { crearDependencias } from '../src/container.js';
 import { runMigrations } from '../src/infrastructure/db/migrator.js';
 import { MemoryMailer } from '../src/infrastructure/mail/mailer.js';
 import { hashPassword } from '../src/infrastructure/security/passwords.js';
-import { TurnstileDesactivado } from '../src/infrastructure/security/turnstile.js';
 import { crearAplicacion } from '../src/presentation/http/app.js';
 
 /**
@@ -26,7 +25,6 @@ const pool = deps.pool;
 const reloj = { ahora: new Date() };
 const mailer = new MemoryMailer();
 deps.mailer = mailer; // nada sale por correo desde este script
-deps.turnstile = new TurnstileDesactivado();
 // La consulta del régimen de salud es un servicio externo: en la muestra responde «subsidiado» para toda persona.
 deps.regimen = {
   activo: true,

@@ -3026,13 +3026,6 @@ paths:
         '200': { description: Vigencias, localidades y estados }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/SinPermiso' }
-  /publico/config:
-    get:
-      tags: [Portal ciudadano]
-      summary: Configuración pública del portal
-      description: 'Devuelve la llave del sitio de Cloudflare Turnstile (null si la verificación está desactivada). Con la verificación activa, la preinscripción, el reenvío del enlace, la solicitud del código de consulta y el inicio de sesión interno exigen la cabecera X-Turnstile-Token; sin ella responden 422 VERIFICACION_ROBOT.'
-      responses:
-        '200': { description: Configuración pública }
   /admin/novedades/beneficios/{id}/finalizar:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }

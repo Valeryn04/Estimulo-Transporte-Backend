@@ -2,7 +2,6 @@ import type { Env } from '../config/env.js';
 import type { Pool } from '../infrastructure/db/pool.js';
 import type { ConsultaRegimen } from '../infrastructure/bdua/regimen.js';
 import type { Mailer } from '../infrastructure/mail/mailer.js';
-import type { VerificadorTurnstile } from '../infrastructure/security/turnstile.js';
 import type { TokenService } from '../infrastructure/security/tokens.js';
 import { forbidden } from '../shared/errors.js';
 
@@ -12,7 +11,6 @@ export interface Dependencias {
   pool: Pool;
   mailer: Mailer;
   tokens: TokenService;
-  turnstile: VerificadorTurnstile;
   /** Consulta del régimen de salud (BDUA/ADRES). */
   regimen: ConsultaRegimen;
   /** Reloj inyectable para pruebas. */

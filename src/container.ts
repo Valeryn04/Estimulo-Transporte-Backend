@@ -5,7 +5,6 @@ import { ServicioEntregas } from './application/entregas.js';
 import { ServicioActualizaciones } from './application/actualizaciones.js';
 import { ServicioEncuestas } from './application/encuestas.js';
 import { crearConsultaRegimen } from './infrastructure/bdua/regimen.js';
-import { crearTurnstile } from './infrastructure/security/turnstile.js';
 import { ServicioSeguimiento } from './application/seguimiento.js';
 import { ServicioNovedades } from './application/novedades.js';
 import { ServicioAutenticacion } from './application/autenticacion.js';
@@ -64,7 +63,6 @@ export function crearDependencias(env: Env): Dependencias {
     pool: createPool(env.databaseUrl, env.dbPoolMax),
     mailer: new SmtpMailer({ ...env.smtp, from: env.mailFrom }),
     tokens: new TokenService(env.jwtSecret),
-    turnstile: crearTurnstile(env.turnstile),
     regimen: crearConsultaRegimen(env.bdua, env.bduaSimulado),
     ahora: () => new Date(),
   };
