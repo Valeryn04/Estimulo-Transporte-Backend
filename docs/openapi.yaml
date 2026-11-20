@@ -313,6 +313,53 @@ paths:
         '422': { $ref: '#/components/responses/Validacion' }
         '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
 
+  /publico/caracterizacion/identificacion:
+    patch:
+      tags: [Portal ciudadano]
+      summary: Corregir el tipo y el número de documento antes de enviar (RNF-10)
+      description: 'Permite corregir el documento de la persona con discapacidad o del cuidador cuando se escribió mal en la preinscripción. Solo antes de enviar la solicitud. Verifica que el documento nuevo no esté ya registrado: si otra solicitud de la vigencia lo tiene responde 409 (`SOLICITUD_EXISTENTE`). Conserva el valor anterior en el historial de correcciones. Si cambia el documento de la persona con discapacidad, repite la consulta al régimen de salud (BDUA/ADRES) con el documento correcto.'
+      security: [{ bearerCiudadano: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [persona, tipoIdentificacionId, numero]
+              properties:
+                persona: { type: string, enum: [PCD, CUIDADOR] }
+                tipoIdentificacionId: { type: integer }
+                numero: { type: string, example: '1046730396' }
+      responses:
+        '200':
+          description: Documento corregido (o sin cambios), con las identificaciones vigentes y la consulta del régimen si se repitió
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cambio: { type: boolean }
+                  pcd: { type: object }
+                  cuidador: { type: object, nullable: true }
+                  regimen:
+                    type: object
+                    nullable: true
+                    properties:
+                      estado: { type: string, enum: [SUBSIDIADO, NO_SUBSIDIADO, NO_DISPONIBLE] }
+                      mensaje: { type: string }
+                      consultadaAt: { type: string, format: date-time }
+                  version: { type: integer }
+                  avance: { $ref: '#/components/schemas/Avance' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: Ese documento ya tiene una solicitud en la vigencia (SOLICITUD_EXISTENTE) o la solicitud ya no admite cambios (SOLICITUD_NO_EDITABLE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/Validacion' }
+        '429': { $ref: '#/components/responses/DemasiadasPeticiones' }
+
   /publico/caracterizacion/documentos:
     get:
       tags: [Portal ciudadano]
@@ -2369,7 +2416,12 @@ paths:
       description: 'PDF con una fila por cada persona que debe recibir su tarjeta (beneficios indicados en «beneficios», separados por comas), con espacio para el identificador, quién recibe y la firma. Después se fotografía o escanea y se adjunta al registrar la entrega.'
       security: [{ bearerInterno: [] }]
       parameters:
-        - { name: beneficios, in: query, required: true, schema: { type: string, example: '1,2,3' } }
+        - {
+            name: beneficios,
+            in: query,
+            required: true,
+            schema: { type: string, example: '1,2,3' },
+          }
       responses:
         '200':
           description: Planilla en PDF
@@ -3852,6 +3904,7 @@ components:
             ocupaciones: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
             eps: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
             tiposTransporte: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
+            tiposIdentificacion: { type: array, items: { $ref: '#/components/schemas/ItemLista' } }
     IdentificacionConsulta:
       type: object
       description: Con el radicado, o con el tipo y número de identificación de la persona con discapacidad.

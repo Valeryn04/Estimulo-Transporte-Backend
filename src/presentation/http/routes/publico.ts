@@ -222,6 +222,12 @@ const entero = (etiqueta: string, min: number, max: number, ayuda: string) =>
     .max(max, `${etiqueta}: ${ayuda}`)
     .nullable();
 
+const identificacionSchema = z.object({
+  persona: z.enum(['PCD', 'CUIDADOR'], { error: 'Indique de quién es el documento' }),
+  tipoIdentificacionId: id('Tipo de identificación'),
+  numero: numero('Número de identificación'),
+});
+
 const caracterizacionSchema = z
   .object({
     version: z.number({ error: 'Recargue la página' }).int().min(0),
@@ -406,6 +412,21 @@ export function rutasPublicas(s: Servicios, limites: Limitadores, tokens: TokenS
       const d = caracterizacionSchema.parse(req.body);
       res.json(
         await s.caracterizacion.guardar(req.solicitudId as number, d as CambiosCaracterizacion, {
+          ip: req.ip ?? null,
+        }),
+      );
+    },
+  );
+
+  /** Corrige el tipo y el número de documento de la persona con discapacidad o del cuidador antes de enviar. */
+  r.patch(
+    '/caracterizacion/identificacion',
+    limites.caracterizacion,
+    autenticarCiudadano(tokens),
+    async (req, res) => {
+      const d = identificacionSchema.parse(req.body);
+      res.json(
+        await s.caracterizacion.corregirIdentificacion(req.solicitudId as number, d, {
           ip: req.ip ?? null,
         }),
       );
