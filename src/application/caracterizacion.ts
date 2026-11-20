@@ -12,11 +12,7 @@ import {
 } from '../domain/caracterizacion.js';
 import { ESTADOS } from '../domain/estados.js';
 import { modoDeEdicion, vistaSubsanacion } from './subsanacion.js';
-import {
-  errorNumeroIdentificacion,
-  normalizarNombre,
-  normalizarNumero,
-} from '../domain/identificacion.js';
+import { normalizarNombre } from '../domain/identificacion.js';
 import { memoriaPublica } from '../infrastructure/cache.js';
 import { withTransaction } from '../infrastructure/db/pool.js';
 import { bitacoraRepo } from '../infrastructure/repositories/bitacora.js';
@@ -26,7 +22,6 @@ import {
   type ItemCorreccion,
 } from '../infrastructure/repositories/caracterizacion.js';
 import { solicitudesRepo, type ItemPublico } from '../infrastructure/repositories/solicitudes.js';
-import type { ServicioDocumentos } from './documentos.js';
 import { DataCipher } from '../infrastructure/security/crypto.js';
 import { conflict, notFound } from '../shared/errors.js';
 import { errorValidacion } from './esquemas.js';
@@ -41,7 +36,6 @@ const CATALOGOS_FORMULARIO = {
   ocupaciones: 'OCUPACION',
   eps: 'EPS',
   tiposTransporte: 'TIPO_TRANSPORTE',
-  tiposIdentificacion: 'TIPO_IDENTIFICACION',
 } as const;
 
 /** Lo que envía la pantalla al guardar: la versión que vio y solo los campos que cambiaron. */
@@ -64,10 +58,7 @@ function hoyBogota(ahora: Date): string {
 export class ServicioCaracterizacion {
   private readonly cipher: DataCipher;
 
-  constructor(
-    private readonly deps: Dependencias,
-    private readonly documentos: ServicioDocumentos,
-  ) {
+  constructor(private readonly deps: Dependencias) {
     this.cipher = new DataCipher(deps.env.encryption);
   }
 
@@ -324,147 +315,6 @@ export class ServicioCaracterizacion {
       avance: r.avance,
       pcdNombre: r.pcd.nombre,
       cuidadorNombre: r.cuidador?.nombre ?? null,
-    };
-  }
-
-  /**
-   * Corrige el tipo y el número de identificación de la persona con discapacidad o del cuidador cuando se
-   * escribieron mal en la preinscripción. Solo antes de enviar la solicitud. Verifica que el documento nuevo no
-   * esté ya registrado (una persona no puede tener dos solicitudes en la vigencia), conserva el valor anterior en
-   * el historial y, si cambia el documento de la persona con discapacidad, repite la consulta al régimen de salud
-   * (BDUA/ADRES) con el documento correcto.
-   */
-  async corregirIdentificacion(
-    solicitudId: number,
-    d: { persona: 'PCD' | 'CUIDADOR'; tipoIdentificacionId: number; numero: string },
-    ctx: ContextoPeticion,
-  ) {
-    const { pool } = this.deps;
-    const cambio = await withTransaction(pool, async (tx) => {
-      if (!(await caracterizacionRepo.bloquear(tx, solicitudId))) {
-        throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
-      }
-      const solicitud = await caracterizacionRepo.contexto(tx, solicitudId);
-      if (!solicitud) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
-      const edicion = await modoDeEdicion(tx, solicitudId, solicitud.estado);
-      if (edicion.modo !== 'TODO') {
-        throw conflict(
-          'SOLICITUD_NO_EDITABLE',
-          'El documento solo se puede corregir antes de enviar la solicitud. Comuníquese con la Gerencia de Desarrollo Social.',
-        );
-      }
-      const esPcd = d.persona === 'PCD';
-      const actual = esPcd ? solicitud.pcd : solicitud.cuidador;
-      const otra = esPcd ? solicitud.cuidador : solicitud.pcd;
-      if (!actual) throw notFound('La solicitud no tiene cuidador', 'CUIDADOR_NO_REGISTRADO');
-      const quien = esPcd ? 'de la persona con discapacidad' : 'del cuidador';
-
-      const tipo = await solicitudesRepo.itemActivo(
-        tx,
-        d.tipoIdentificacionId,
-        'TIPO_IDENTIFICACION',
-      );
-      const numero = normalizarNumero(d.numero);
-      const errores: ErrorCampo[] = [];
-      if (!tipo) {
-        errores.push({
-          campo: 'tipoIdentificacionId',
-          mensaje: `Tipo de identificación ${quien}: elija una opción de la lista`,
-        });
-      } else {
-        const e = errorNumeroIdentificacion(tipo.codigo, numero);
-        if (e) {
-          errores.push({
-            campo: 'numero',
-            mensaje: `Número de identificación ${quien}: ${e.toLowerCase()}`,
-          });
-        }
-      }
-      if (errores.length > 0 || !tipo) throw errorValidacion(errores);
-
-      if (tipo.codigo === actual.tipoCodigo && numero === actual.numero) {
-        return null; // Nada cambió.
-      }
-      if (otra && tipo.codigo === otra.tipoCodigo && numero === otra.numero) {
-        throw errorValidacion([
-          {
-            campo: 'numero',
-            mensaje: esPcd
-              ? 'Número de identificación de la persona con discapacidad: no puede ser el mismo del cuidador'
-              : 'Número de identificación del cuidador: no puede ser el mismo de la persona con discapacidad',
-          },
-        ]);
-      }
-
-      // ¿Ese documento ya está registrado? Una persona no puede tener dos solicitudes en la misma vigencia.
-      const existente = await solicitudesRepo.idPersona(tx, tipo.id, numero);
-      let destino: number;
-      let creada = false;
-      if (existente !== null) {
-        if (esPcd) {
-          const uso = await caracterizacionRepo.usoDePersona(tx, existente, solicitudId);
-          if (uso.solicitudEnVigencia) {
-            throw conflict(
-              'SOLICITUD_EXISTENTE',
-              'Ya existe una solicitud para esta persona en la vigencia actual. Revise que el número esté bien escrito o consulte el estado de esa solicitud.',
-            );
-          }
-        }
-        destino = existente;
-      } else if ((await caracterizacionRepo.usoDePersona(tx, actual.id, solicitudId)).enOtras) {
-        // El registro actual lo comparten otras solicitudes: no se cambia para todas, se crea uno nuevo.
-        destino = await caracterizacionRepo.crearPersona(tx, tipo.id, numero, actual.nombre);
-        creada = true;
-      } else {
-        destino = actual.id;
-        await caracterizacionRepo.actualizarIdentificacionPersona(tx, actual.id, tipo.id, numero);
-      }
-      if (destino !== actual.id) {
-        await caracterizacionRepo.asignarPersona(tx, solicitudId, d.persona, destino);
-      }
-      await correccionesRepo.registrar(
-        tx,
-        {
-          solicitudId,
-          entidad: 'persona',
-          entidadId: actual.id,
-          cambios: [
-            ...(tipo.codigo !== actual.tipoCodigo
-              ? [{ campo: 'tipo_identificacion', anterior: actual.tipoCodigo, nuevo: tipo.codigo }]
-              : []),
-            ...(numero !== actual.numero
-              ? [{ campo: 'numero_identificacion', anterior: actual.numero, nuevo: numero }]
-              : []),
-          ],
-          usuarioId: null,
-          ip: ctx.ip,
-        },
-        this.cipher,
-      );
-      await bitacoraRepo.registrar(tx, {
-        modulo: MODULO.CARACTERIZACION,
-        accion: ACCION.IDENTIFICACION_CORREGIDA,
-        entidad: 'solicitud',
-        entidadId: solicitudId,
-        solicitudId,
-        detalle: { persona: d.persona, registroNuevo: creada || destino !== actual.id },
-        ip: ctx.ip,
-      });
-      return { esPcd };
-    });
-    // Con otro documento, la consulta que ya se había hecho no vale: se repite con el correcto.
-    let regimen = null;
-    if (cambio?.esPcd) {
-      regimen = await this.documentos.consultarRegimen(solicitudId, ctx, true, true);
-    }
-    const r = await this.obtener(solicitudId);
-    return {
-      cambio: cambio !== null,
-      pcd: r.pcd,
-      cuidador: r.cuidador,
-      regimen,
-      version: r.version,
-      avance: r.avance,
     };
   }
 

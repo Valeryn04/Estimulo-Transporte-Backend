@@ -240,69 +240,6 @@ export const caracterizacionRepo = {
     ]);
   },
 
-  /** Cambia el tipo y el número de identificación de la persona (la llave única impide repetir otro registro). */
-  async actualizarIdentificacionPersona(
-    db: Queryable,
-    personaId: number,
-    tipoId: number,
-    numero: string,
-  ): Promise<void> {
-    await db.query(
-      `UPDATE personas SET tipo_identificacion_id = $2, numero_identificacion = $3, updated_at = now()
-        WHERE id = $1`,
-      [personaId, tipoId, numero],
-    );
-  },
-
-  /** Crea una persona nueva con ese documento y nombre (la existente se comparte con otras solicitudes). */
-  async crearPersona(
-    db: Queryable,
-    tipoId: number,
-    numero: string,
-    nombre: string,
-  ): Promise<number> {
-    const r = await db.query<{ id: number }>(
-      `INSERT INTO personas (tipo_identificacion_id, numero_identificacion, nombre_completo)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [tipoId, numero, nombre],
-    );
-    return (r.rows[0] as { id: number }).id;
-  },
-
-  /** Hace que la solicitud apunte a otra persona como PCD o como cuidador. */
-  async asignarPersona(
-    db: Queryable,
-    solicitudId: number,
-    rol: 'PCD' | 'CUIDADOR',
-    personaId: number,
-  ): Promise<void> {
-    const columna = rol === 'PCD' ? 'pcd_id' : 'cuidador_id';
-    await db.query(`UPDATE solicitudes SET ${columna} = $2, updated_at = now() WHERE id = $1`, [
-      solicitudId,
-      personaId,
-    ]);
-  },
-
-  /**
-   * Dónde más figura una persona: si ya tiene solicitud propia (como persona con discapacidad) en la misma
-   * vigencia de esta solicitud, y si aparece en cualquier otra solicitud.
-   */
-  async usoDePersona(
-    db: Queryable,
-    personaId: number,
-    solicitudId: number,
-  ): Promise<{ solicitudEnVigencia: boolean; enOtras: boolean }> {
-    const r = await db.query<{ en_vigencia: boolean; en_otras: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM solicitudes o JOIN solicitudes s ON s.id = $2
-                       WHERE o.id <> s.id AND o.vigencia_id = s.vigencia_id AND o.pcd_id = $1) AS en_vigencia,
-              EXISTS (SELECT 1 FROM solicitudes o
-                       WHERE o.id <> $2 AND (o.pcd_id = $1 OR o.cuidador_id = $1)) AS en_otras`,
-      [personaId, solicitudId],
-    );
-    const f = r.rows[0];
-    return { solicitudEnVigencia: f?.en_vigencia ?? false, enOtras: f?.en_otras ?? false };
-  },
-
   /** Nombre y código de elementos de catálogo, para mostrar los que ya se eligieron aunque se hayan desactivado. */
   async itemsPorId(
     db: Queryable,

@@ -481,18 +481,12 @@ export class ServicioDocumentos {
   /**
    * Consulta con el documento de la persona con discapacidad si está afiliada y activa en el régimen subsidiado. Es un
    * filtro: si lo está, la constancia de la consulta queda adjunta como su soporte de afiliación; si no lo está, o el
-   * servicio no responde, la solicitud no se puede enviar. Una consulta que ya dio «subsidiado» no se repite, salvo
-   * que la persona haya corregido su documento: entonces la consulta anterior ya no vale y se hace de nuevo.
+   * servicio no responde, la solicitud no se puede enviar. Una consulta que ya dio «subsidiado» no se repite.
    */
-  async consultarRegimen(
-    solicitudId: number,
-    ctx: ContextoPeticion,
-    forzar = false,
-    documentoCorregido = false,
-  ) {
+  async consultarRegimen(solicitudId: number, ctx: ContextoPeticion, forzar = false) {
     const { pool, regimen, ahora } = this.deps;
     const previa = await consultasRegimenRepo.ultima(pool, solicitudId);
-    if (previa?.resultado === 'SUBSIDIADO' && !documentoCorregido) return this.vistaRegimen(previa);
+    if (previa?.resultado === 'SUBSIDIADO') return this.vistaRegimen(previa);
     const contexto = await caracterizacionRepo.contexto(pool, solicitudId);
     if (!contexto) throw notFound('La solicitud no existe', 'SOLICITUD_NO_ENCONTRADA');
     const edicion = await modoDeEdicion(pool, solicitudId, contexto.estado);

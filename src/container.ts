@@ -89,7 +89,7 @@ export function crearServicios(deps: Dependencias): Servicios {
     correos,
     preinscripcion: new ServicioPreinscripcion(deps, correos),
     consulta: new ServicioConsulta(deps, correos),
-    caracterizacion: new ServicioCaracterizacion(deps, documentos),
+    caracterizacion: new ServicioCaracterizacion(deps),
     documentos,
     radicacion: new ServicioRadicacion(deps, correos, documentos),
     validacion: new ServicioValidacion(deps, correos, documentos, cruces, priorizacion),
